@@ -2,11 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { QrCode, ArrowLeft, CheckCircle, Camera } from "lucide-react";
-import { toast } from "sonner";
+import { QrCode, ArrowLeft, CheckCircle, Camera, Wifi, WifiOff } from "lucide-react";
+import { useAttendance } from "@/hooks/useAttendance";
+import { useSync } from "@/hooks/useSync";
 
 const Scan = () => {
   const navigate = useNavigate();
+  const { students, markAttendance } = useAttendance();
+  const { isOnline } = useSync();
   const [scanning, setScanning] = useState(false);
   const [scannedStudent, setScannedStudent] = useState<string | null>(null);
 
@@ -19,18 +22,21 @@ const Scan = () => {
 
   const handleStartScan = () => {
     setScanning(true);
+    setScannedStudent(null);
+    
     // Simulate QR scan after 2 seconds
-    setTimeout(() => {
-      const demoStudents = [
-        "Rahul Kumar - Class 5A",
-        "Priya Sharma - Class 5B", 
-        "Amit Singh - Class 5A",
-        "Neha Patel - Class 5C"
-      ];
-      const randomStudent = demoStudents[Math.floor(Math.random() * demoStudents.length)];
-      setScannedStudent(randomStudent);
+    setTimeout(async () => {
+      if (students.length === 0) {
+        setScanning(false);
+        return;
+      }
+      
+      const randomStudent = students[Math.floor(Math.random() * students.length)];
+      setScannedStudent(`${randomStudent.name} - ${randomStudent.class}`);
       setScanning(false);
-      toast.success(`Attendance marked for ${randomStudent}`);
+      
+      // Mark attendance in IndexedDB
+      await markAttendance(randomStudent.id, "present");
     }, 2000);
   };
 
@@ -55,6 +61,23 @@ const Scan = () => {
       </div>
 
       <div className="max-w-4xl mx-auto p-4 space-y-6">
+        {/* Online Status */}
+        <Card className="p-3">
+          <div className="flex items-center gap-2 justify-center">
+            {isOnline ? (
+              <>
+                <Wifi className="w-4 h-4 text-success" />
+                <span className="text-sm font-medium text-success">Online - Auto-syncing</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4 text-warning" />
+                <span className="text-sm font-medium text-warning">Offline - Saving locally</span>
+              </>
+            )}
+          </div>
+        </Card>
+
         {/* Scanner Card */}
         <Card className="p-6 space-y-6">
           <div className="text-center">
