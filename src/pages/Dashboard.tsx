@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut } from "lucide-react";
+import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, WifiOff, CloudUpload } from "lucide-react";
 import { toast } from "sonner";
+import { useAttendance } from "@/hooks/useAttendance";
+import { useSync } from "@/hooks/useSync";
 
 interface AttendanceStats {
   total: number;
@@ -14,20 +16,29 @@ interface AttendanceStats {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { getTodayStats, todayAttendance } = useAttendance();
+  const { isOnline, isSyncing, unsyncedCount } = useSync();
   const [stats, setStats] = useState<AttendanceStats>({
-    total: 45,
-    present: 38,
-    absent: 4,
-    notMarked: 3
+    total: 0,
+    present: 0,
+    absent: 0,
+    notMarked: 0
   });
 
   useEffect(() => {
-    // Check if teacher is logged in
     const isLoggedIn = localStorage.getItem("teacherLoggedIn");
     if (!isLoggedIn) {
       navigate("/login");
     }
   }, [navigate]);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      const todayStats = await getTodayStats();
+      setStats(todayStats);
+    };
+    loadStats();
+  }, [getTodayStats, todayAttendance]);
 
   const handleLogout = () => {
     localStorage.removeItem("teacherLoggedIn");
@@ -87,6 +98,39 @@ const Dashboard = () => {
       </div>
 
       <div className="max-w-4xl mx-auto p-4 space-y-6">
+        {/* Online Status Banner */}
+        <Card className={`p-4 ${isOnline ? 'bg-success/10' : 'bg-warning/10'}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {isOnline ? (
+                <>
+                  <Wifi className="w-5 h-5 text-success" />
+                  <div>
+                    <p className="font-semibold text-success">Connected</p>
+                    <p className="text-sm text-muted-foreground">All data synced</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-5 h-5 text-warning" />
+                  <div>
+                    <p className="font-semibold text-warning">Working Offline</p>
+                    <p className="text-sm text-muted-foreground">Data will sync automatically</p>
+                  </div>
+                </>
+              )}
+            </div>
+            {unsyncedCount > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-background rounded-lg">
+                <CloudUpload className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  {isSyncing ? "Syncing..." : `${unsyncedCount} pending`}
+                </span>
+              </div>
+            )}
+          </div>
+        </Card>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <StatCard 
