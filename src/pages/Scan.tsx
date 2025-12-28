@@ -2,16 +2,19 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { QrCode, ArrowLeft, CheckCircle, Camera, Wifi, WifiOff } from "lucide-react";
+import { QrCode, ArrowLeft, CheckCircle, Camera, Wifi, WifiOff, LogIn, LogOut } from "lucide-react";
 import { useAttendance } from "@/hooks/useAttendance";
 import { useSync } from "@/hooks/useSync";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Scan = () => {
   const navigate = useNavigate();
-  const { students, markAttendance } = useAttendance();
+  const { students, markAttendance, hasMarkedType } = useAttendance();
   const { isOnline } = useSync();
   const [scanning, setScanning] = useState(false);
   const [scannedStudent, setScannedStudent] = useState<string | null>(null);
+  const [scanType, setScanType] = useState<"entry" | "exit">("entry");
+  const [lastScanType, setLastScanType] = useState<"entry" | "exit">("entry");
 
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("teacherLoggedIn");
@@ -31,12 +34,29 @@ const Scan = () => {
         return;
       }
       
-      const randomStudent = students[Math.floor(Math.random() * students.length)];
+      // Find a student that hasn't been marked for this type yet
+      const eligibleStudents = students.filter(s => {
+        const hasType = hasMarkedType(s.id, scanType);
+        if (scanType === "exit") {
+          const hasEntry = hasMarkedType(s.id, "entry");
+          return hasEntry && !hasType;
+        }
+        return !hasType;
+      });
+
+      if (eligibleStudents.length === 0) {
+        setScanning(false);
+        setScannedStudent(null);
+        return;
+      }
+
+      const randomStudent = eligibleStudents[Math.floor(Math.random() * eligibleStudents.length)];
       setScannedStudent(`${randomStudent.name} - ${randomStudent.class}`);
+      setLastScanType(scanType);
       setScanning(false);
       
       // Mark attendance in IndexedDB
-      await markAttendance(randomStudent.id, "present");
+      await markAttendance(randomStudent.id, "present", scanType);
     }, 2000);
   };
 
@@ -78,6 +98,20 @@ const Scan = () => {
           </div>
         </Card>
 
+        {/* Entry/Exit Tabs */}
+        <Tabs value={scanType} onValueChange={(v) => setScanType(v as "entry" | "exit")} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 h-14">
+            <TabsTrigger value="entry" className="text-lg gap-2">
+              <LogIn className="w-5 h-5" />
+              Entry Scan
+            </TabsTrigger>
+            <TabsTrigger value="exit" className="text-lg gap-2">
+              <LogOut className="w-5 h-5" />
+              Exit Scan
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
         {/* Scanner Card */}
         <Card className="p-6 space-y-6">
           <div className="text-center">
@@ -93,14 +127,16 @@ const Scan = () => {
             
             {scanning ? (
               <div className="space-y-2">
-                <p className="text-xl font-semibold">Scanning...</p>
+                <p className="text-xl font-semibold">Scanning for {scanType}...</p>
                 <p className="text-muted-foreground">Position QR code in frame</p>
               </div>
             ) : scannedStudent ? (
               <div className="space-y-4">
                 <CheckCircle className="w-16 h-16 text-success mx-auto" />
                 <div>
-                  <p className="text-xl font-semibold text-success">Attendance Marked!</p>
+                  <p className="text-xl font-semibold text-success">
+                    {lastScanType === "entry" ? "Entry" : "Exit"} Marked!
+                  </p>
                   <p className="text-lg font-medium mt-2">{scannedStudent}</p>
                   <p className="text-sm text-muted-foreground">
                     {new Date().toLocaleTimeString("en-IN")}
@@ -109,7 +145,7 @@ const Scan = () => {
               </div>
             ) : (
               <div className="space-y-2">
-                <p className="text-xl font-semibold">Ready to Scan</p>
+                <p className="text-xl font-semibold">Ready to Scan {scanType === "entry" ? "Entry" : "Exit"}</p>
                 <p className="text-muted-foreground">Tap button below to activate camera</p>
               </div>
             )}
@@ -126,12 +162,11 @@ const Scan = () => {
 
         {/* Instructions */}
         <Card className="p-6 bg-accent text-accent-foreground">
-          <h3 className="font-bold text-lg mb-3">Instructions</h3>
+          <h3 className="font-bold text-lg mb-3">Double Verification Instructions</h3>
           <ul className="space-y-2 text-sm">
-            <li>• Hold phone steady and align QR code in center</li>
-            <li>• Ensure good lighting for best results</li>
-            <li>• QR code should fill most of the frame</li>
-            <li>• Attendance is saved automatically</li>
+            <li>• <strong>Entry Scan:</strong> Use when students arrive at school</li>
+            <li>• <strong>Exit Scan:</strong> Use when students leave (requires entry first)</li>
+            <li>• Attendance is only valid when both scans are recorded</li>
             <li>• Works offline - syncs when connected</li>
           </ul>
         </Card>

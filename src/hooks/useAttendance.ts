@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { db, AttendanceRecord, Student } from "@/lib/db";
+import { db, AttendanceRecord, Student, AttendanceStatus } from "@/lib/db";
 import { toast } from "sonner";
 
 export const useAttendance = () => {
@@ -56,10 +56,11 @@ export const useAttendance = () => {
     loadData();
   }, [loadData]);
 
-  // Mark attendance
+  // Mark attendance with entry/exit type
   const markAttendance = useCallback(async (
     studentId: string,
-    status: "present" | "absent"
+    status: "present" | "absent",
+    type: "entry" | "exit" = "entry"
   ): Promise<void> => {
     try {
       const student = students.find(s => s.id === studentId);
@@ -68,10 +69,12 @@ export const useAttendance = () => {
         return;
       }
 
-      // Check if already marked today
-      const existingRecord = todayAttendance.find(a => a.studentId === studentId);
+      // Check if already marked for this type today
+      const existingRecord = todayAttendance.find(
+        a => a.studentId === studentId && a.type === type
+      );
       if (existingRecord) {
-        toast.info(`${student.name} already marked as ${existingRecord.status}`);
+        toast.info(`${student.name}'s ${type} already marked`);
         return;
       }
 
@@ -81,6 +84,7 @@ export const useAttendance = () => {
         rollNo: student.rollNo,
         class: student.class,
         status,
+        type,
         timestamp: Date.now(),
         date: today,
         synced: false
@@ -89,17 +93,32 @@ export const useAttendance = () => {
       await db.addAttendance(record);
       await loadData(); // Refresh data
       
-      toast.success(`${student.name} marked as ${status}`);
+      const typeLabel = type === "entry" ? "Entry" : "Exit";
+      toast.success(`${student.name} - ${typeLabel} marked as ${status}`);
     } catch (error) {
       console.error("Error marking attendance:", error);
       toast.error("Failed to mark attendance");
     }
   }, [students, todayAttendance, today, loadData]);
 
-  // Get student status for today
-  const getStudentStatus = useCallback((studentId: string): "present" | "absent" | "unmarked" => {
-    const record = todayAttendance.find(a => a.studentId === studentId);
-    return record ? record.status : "unmarked";
+  // Get student status for today (with double verification)
+  const getStudentStatus = useCallback((studentId: string): AttendanceStatus => {
+    const studentRecords = todayAttendance.filter(a => a.studentId === studentId);
+    
+    const hasEntry = studentRecords.some(r => r.type === "entry" && r.status === "present");
+    const hasExit = studentRecords.some(r => r.type === "exit" && r.status === "present");
+    const isAbsent = studentRecords.some(r => r.status === "absent");
+    
+    if (isAbsent) return "absent";
+    if (hasEntry && hasExit) return "complete";
+    if (hasEntry) return "entry-only";
+    if (hasExit) return "exit-only";
+    return "unmarked";
+  }, [todayAttendance]);
+
+  // Check if specific type is marked
+  const hasMarkedType = useCallback((studentId: string, type: "entry" | "exit"): boolean => {
+    return todayAttendance.some(a => a.studentId === studentId && a.type === type);
   }, [todayAttendance]);
 
   // Get today's stats
@@ -113,6 +132,7 @@ export const useAttendance = () => {
     loading,
     markAttendance,
     getStudentStatus,
+    hasMarkedType,
     getTodayStats,
     refreshData: loadData
   };
