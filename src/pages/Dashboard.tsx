@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, WifiOff, CloudUpload } from "lucide-react";
+import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, WifiOff, CloudUpload, ArrowRightCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAttendance } from "@/hooks/useAttendance";
 import { useSync } from "@/hooks/useSync";
 
 interface AttendanceStats {
   total: number;
-  present: number;
+  complete: number;
+  entryOnly: number;
   absent: number;
   notMarked: number;
 }
@@ -20,7 +21,8 @@ const Dashboard = () => {
   const { isOnline, isSyncing, unsyncedCount } = useSync();
   const [stats, setStats] = useState<AttendanceStats>({
     total: 0,
-    present: 0,
+    complete: 0,
+    entryOnly: 0,
     absent: 0,
     notMarked: 0
   });
@@ -141,9 +143,15 @@ const Dashboard = () => {
           />
           <StatCard 
             icon={CheckCircle} 
-            label="Present Today" 
-            value={stats.present} 
+            label="Verified (Entry + Exit)" 
+            value={stats.complete} 
             color="bg-success text-success-foreground"
+          />
+          <StatCard 
+            icon={ArrowRightCircle} 
+            label="Entry Only" 
+            value={stats.entryOnly} 
+            color="bg-primary text-primary-foreground"
           />
           <StatCard 
             icon={XCircle} 

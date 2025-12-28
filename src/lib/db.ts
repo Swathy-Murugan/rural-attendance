@@ -15,10 +15,13 @@ export interface AttendanceRecord {
   rollNo: string;
   class: string;
   status: "present" | "absent";
+  type: "entry" | "exit";
   timestamp: number;
   date: string;
   synced: boolean;
 }
+
+export type AttendanceStatus = "unmarked" | "entry-only" | "exit-only" | "complete" | "absent";
 
 export interface Student {
   id: string;
@@ -173,24 +176,62 @@ class AttendanceDB {
     });
   }
 
-  // Get today's attendance stats
+  // Get student attendance status for a specific date
+  async getStudentAttendanceStatus(studentId: string, date: string): Promise<AttendanceStatus> {
+    const records = await this.getAttendanceByDate(date);
+    const studentRecords = records.filter(r => r.studentId === studentId);
+    
+    const hasEntry = studentRecords.some(r => r.type === "entry" && r.status === "present");
+    const hasExit = studentRecords.some(r => r.type === "exit" && r.status === "present");
+    const isAbsent = studentRecords.some(r => r.status === "absent");
+    
+    if (isAbsent) return "absent";
+    if (hasEntry && hasExit) return "complete";
+    if (hasEntry) return "entry-only";
+    if (hasExit) return "exit-only";
+    return "unmarked";
+  }
+
+  // Get today's attendance stats with double verification
   async getTodayStats(date: string): Promise<{
     total: number;
-    present: number;
+    complete: number;
+    entryOnly: number;
     absent: number;
     notMarked: number;
   }> {
-    const [students, attendance] = await Promise.all([
-      this.getStudents(),
-      this.getAttendanceByDate(date)
-    ]);
-
+    const students = await this.getStudents();
+    const attendance = await this.getAttendanceByDate(date);
+    
     const total = students.length;
-    const present = attendance.filter(a => a.status === "present").length;
-    const absent = attendance.filter(a => a.status === "absent").length;
-    const notMarked = total - present - absent;
+    let complete = 0;
+    let entryOnly = 0;
+    let absent = 0;
+    
+    for (const student of students) {
+      const studentRecords = attendance.filter(r => r.studentId === student.id);
+      const hasEntry = studentRecords.some(r => r.type === "entry" && r.status === "present");
+      const hasExit = studentRecords.some(r => r.type === "exit" && r.status === "present");
+      const isAbsent = studentRecords.some(r => r.status === "absent");
+      
+      if (isAbsent) {
+        absent++;
+      } else if (hasEntry && hasExit) {
+        complete++;
+      } else if (hasEntry) {
+        entryOnly++;
+      }
+    }
+    
+    const notMarked = total - complete - entryOnly - absent;
 
-    return { total, present, absent, notMarked };
+    return { total, complete, entryOnly, absent, notMarked };
+  }
+
+  // Check if attendance type already exists for student on date
+  async hasAttendanceType(studentId: string, date: string, type: "entry" | "exit"): Promise<boolean> {
+    const records = await this.getAttendanceByDate(date);
+    return records.some(r => r.studentId === studentId && r.type === type);
   }
 }
 
