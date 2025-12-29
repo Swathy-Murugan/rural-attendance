@@ -1,26 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { School, Lock } from "lucide-react";
+import { School, Lock, User } from "lucide-react";
 import { toast } from "sonner";
+import { db } from "@/lib/db";
 
 const Login = () => {
-  const [pin, setPin] = useState("");
+  const [teacherId, setTeacherId] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    // Initialize demo teachers on first load
+    db.initDemoTeachers();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
     
-    // Simple PIN validation (demo: 1234)
-    if (pin === "1234") {
-      localStorage.setItem("teacherLoggedIn", "true");
-      toast.success("Welcome, Teacher!");
-      navigate("/dashboard");
-    } else {
-      toast.error("Invalid PIN. Try 1234 for demo.");
-      setPin("");
+    try {
+      const teacher = await db.authenticateTeacher(teacherId, password);
+      
+      if (teacher) {
+        localStorage.setItem("teacherLoggedIn", "true");
+        localStorage.setItem("teacherId", teacher.id);
+        localStorage.setItem("teacherName", teacher.name);
+        localStorage.setItem("teacherClass", teacher.assignedClass);
+        toast.success(`Welcome, ${teacher.name}!`);
+        navigate("/dashboard");
+      } else {
+        toast.error("Invalid Teacher ID or Password");
+        setPassword("");
+      }
+    } catch (error) {
+      toast.error("Login failed. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -35,32 +54,50 @@ const Login = () => {
           <p className="text-muted-foreground text-lg">Teacher Login</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Teacher ID
+            </label>
+            <Input
+              type="text"
+              value={teacherId}
+              onChange={(e) => setTeacherId(e.target.value.toUpperCase())}
+              placeholder="Enter Teacher ID (e.g., T001)"
+              className="h-12 text-lg"
+            />
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground flex items-center gap-2">
               <Lock className="w-4 h-4" />
-              Enter PIN
+              Password
             </label>
             <Input
               type="password"
               inputMode="numeric"
               maxLength={4}
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-              placeholder="Enter 4-digit PIN"
-              className="h-14 text-2xl text-center tracking-widest"
+              value={password}
+              onChange={(e) => setPassword(e.target.value.replace(/\D/g, ""))}
+              placeholder="Enter 4-digit Password"
+              className="h-12 text-lg text-center tracking-widest"
             />
-            <p className="text-xs text-muted-foreground text-center">
-              Demo PIN: 1234
-            </p>
+          </div>
+
+          <div className="bg-muted/50 p-3 rounded-lg text-sm text-muted-foreground">
+            <p className="font-medium mb-1">Demo Accounts:</p>
+            <p>T001 / 1234 - Class 5A</p>
+            <p>T002 / 5678 - Class 5B</p>
+            <p>T003 / 9012 - Class 6A</p>
           </div>
 
           <Button 
             type="submit" 
             className="w-full h-14 text-lg font-semibold"
-            disabled={pin.length !== 4}
+            disabled={!teacherId || password.length !== 4 || isLoading}
           >
-            Login
+            {isLoading ? "Logging in..." : "Login"}
           </Button>
         </form>
 

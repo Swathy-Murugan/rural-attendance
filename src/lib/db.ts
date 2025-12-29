@@ -1,11 +1,12 @@
 // IndexedDB wrapper for offline attendance storage
 
 const DB_NAME = "RuralAttendanceDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORES = {
   ATTENDANCE: "attendance",
   STUDENTS: "students",
-  SYNC_QUEUE: "syncQueue"
+  SYNC_QUEUE: "syncQueue",
+  TEACHERS: "teachers"
 };
 
 export interface AttendanceRecord {
@@ -28,6 +29,13 @@ export interface Student {
   name: string;
   rollNo: string;
   class: string;
+}
+
+export interface Teacher {
+  id: string;
+  name: string;
+  password: string;
+  assignedClass: string;
 }
 
 class AttendanceDB {
@@ -70,8 +78,62 @@ class AttendanceDB {
           });
           syncStore.createIndex("timestamp", "timestamp", { unique: false });
         }
+
+        // Teachers store
+        if (!db.objectStoreNames.contains(STORES.TEACHERS)) {
+          db.createObjectStore(STORES.TEACHERS, { keyPath: "id" });
+        }
       };
     });
+  }
+
+  // Initialize demo teachers
+  async initDemoTeachers(): Promise<void> {
+    const existingTeachers = await this.getTeachers();
+    if (existingTeachers.length === 0) {
+      const demoTeachers: Teacher[] = [
+        { id: "T001", name: "Ramesh Kumar", password: "1234", assignedClass: "5A" },
+        { id: "T002", name: "Sunita Devi", password: "5678", assignedClass: "5B" },
+        { id: "T003", name: "Anil Sharma", password: "9012", assignedClass: "6A" },
+      ];
+      await this.saveTeachers(demoTeachers);
+    }
+  }
+
+  // Save teachers to local database
+  async saveTeachers(teachers: Teacher[]): Promise<void> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([STORES.TEACHERS], "readwrite");
+      const store = transaction.objectStore(STORES.TEACHERS);
+
+      teachers.forEach(teacher => store.put(teacher));
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  // Get all teachers
+  async getTeachers(): Promise<Teacher[]> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([STORES.TEACHERS], "readonly");
+      const store = transaction.objectStore(STORES.TEACHERS);
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // Authenticate teacher
+  async authenticateTeacher(teacherId: string, password: string): Promise<Teacher | null> {
+    const teachers = await this.getTeachers();
+    const teacher = teachers.find(t => t.id.toLowerCase() === teacherId.toLowerCase() && t.password === password);
+    return teacher || null;
   }
 
   // Add attendance record
