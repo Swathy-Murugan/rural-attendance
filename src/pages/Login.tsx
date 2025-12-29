@@ -85,14 +85,7 @@ const Login = () => {
             />
           </div>
 
-          <div className="bg-muted/50 p-3 rounded-lg text-sm text-muted-foreground">
-            <p className="font-medium mb-1">Demo Accounts:</p>
-            <p>T001 / 1234 - Class 5A</p>
-            <p>T002 / 5678 - Class 5B</p>
-            <p>T003 / 9012 - Class 6A</p>
-          </div>
-
-          <Button 
+          <Button
             type="submit" 
             className="w-full h-14 text-lg font-semibold"
             disabled={!teacherId || password.length !== 4 || isLoading}
