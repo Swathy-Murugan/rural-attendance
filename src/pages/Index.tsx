@@ -42,8 +42,9 @@ const Index = () => {
               size="lg"
               variant="outline"
               className="h-14 px-8 text-lg font-semibold bg-transparent text-primary-foreground border-primary-foreground hover:bg-background/20"
+              onClick={() => navigate("/student-auth")}
             >
-              Learn More
+              Student Login
             </Button>
           </div>
         </div>

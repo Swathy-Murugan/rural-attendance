@@ -14,7 +14,92 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      student_attendance: {
+        Row: {
+          attendance_date: string
+          created_at: string
+          entry_time: string | null
+          exit_time: string | null
+          id: string
+          marked_by: string | null
+          status: string
+          student_id: string
+          synced: boolean | null
+        }
+        Insert: {
+          attendance_date?: string
+          created_at?: string
+          entry_time?: string | null
+          exit_time?: string | null
+          id?: string
+          marked_by?: string | null
+          status?: string
+          student_id: string
+          synced?: boolean | null
+        }
+        Update: {
+          attendance_date?: string
+          created_at?: string
+          entry_time?: string | null
+          exit_time?: string | null
+          id?: string
+          marked_by?: string | null
+          status?: string
+          student_id?: string
+          synced?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_attendance_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      students: {
+        Row: {
+          class: string
+          created_at: string
+          id: string
+          name: string
+          password: string
+          qr_code: string
+          roll_number: string
+          scholarship_eligible: boolean | null
+          school_name: string
+          section: string
+          updated_at: string
+        }
+        Insert: {
+          class: string
+          created_at?: string
+          id?: string
+          name: string
+          password: string
+          qr_code: string
+          roll_number: string
+          scholarship_eligible?: boolean | null
+          school_name: string
+          section: string
+          updated_at?: string
+        }
+        Update: {
+          class?: string
+          created_at?: string
+          id?: string
+          name?: string
+          password?: string
+          qr_code?: string
+          roll_number?: string
+          scholarship_eligible?: boolean | null
+          school_name?: string
+          section?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
