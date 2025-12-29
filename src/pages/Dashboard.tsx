@@ -42,8 +42,14 @@ const Dashboard = () => {
     loadStats();
   }, [getTodayStats, todayAttendance]);
 
+  const teacherName = localStorage.getItem("teacherName") || "Teacher";
+  const teacherClass = localStorage.getItem("teacherClass") || "";
+
   const handleLogout = () => {
     localStorage.removeItem("teacherLoggedIn");
+    localStorage.removeItem("teacherId");
+    localStorage.removeItem("teacherName");
+    localStorage.removeItem("teacherClass");
     toast.success("Logged out successfully");
     navigate("/login");
   };
@@ -78,9 +84,9 @@ const Dashboard = () => {
       <div className="bg-primary text-primary-foreground p-4 shadow-md">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
+            <h1 className="text-2xl font-bold">Welcome, {teacherName}</h1>
             <p className="text-sm opacity-90">
-              {new Date().toLocaleDateString("en-IN", { 
+              Class {teacherClass} • {new Date().toLocaleDateString("en-IN", { 
                 weekday: "long", 
                 year: "numeric", 
                 month: "long", 
