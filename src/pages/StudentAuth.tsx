@@ -24,10 +24,9 @@ const StudentAuth = () => {
     confirmPassword: "",
   });
 
-  // Sign In state
+  // Sign In state - only roll number and password (removed school name)
   const [signInData, setSignInData] = useState({
     rollNumber: "",
-    schoolName: "",
     password: "",
   });
 
@@ -117,7 +116,6 @@ const StudentAuth = () => {
         .from("students")
         .select("*")
         .eq("roll_number", signInData.rollNumber.trim())
-        .eq("school_name", signInData.schoolName.trim())
         .eq("password", signInData.password)
         .maybeSingle();
 
@@ -173,21 +171,6 @@ const StudentAuth = () => {
                   value={signInData.rollNumber}
                   onChange={(e) => setSignInData({ ...signInData, rollNumber: e.target.value })}
                   placeholder="Enter your roll number"
-                  className="h-11"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                  <Building className="w-4 h-4" />
-                  School Name
-                </label>
-                <Input
-                  type="text"
-                  value={signInData.schoolName}
-                  onChange={(e) => setSignInData({ ...signInData, schoolName: e.target.value })}
-                  placeholder="Enter your school name"
                   className="h-11"
                   required
                 />
