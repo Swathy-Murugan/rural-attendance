@@ -60,42 +60,51 @@ export type Database = {
       }
       students: {
         Row: {
+          absent_days: number
           class: string
           created_at: string
           id: string
           name: string
           password: string
+          present_days: number
           qr_code: string
           roll_number: string
           scholarship_eligible: boolean | null
           school_name: string
           section: string
+          total_days: number
           updated_at: string
         }
         Insert: {
+          absent_days?: number
           class: string
           created_at?: string
           id?: string
           name: string
           password: string
+          present_days?: number
           qr_code: string
           roll_number: string
           scholarship_eligible?: boolean | null
           school_name: string
           section: string
+          total_days?: number
           updated_at?: string
         }
         Update: {
+          absent_days?: number
           class?: string
           created_at?: string
           id?: string
           name?: string
           password?: string
+          present_days?: number
           qr_code?: string
           roll_number?: string
           scholarship_eligible?: boolean | null
           school_name?: string
           section?: string
+          total_days?: number
           updated_at?: string
         }
         Relationships: []
