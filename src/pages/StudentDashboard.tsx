@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isToday, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO } from "date-fns";
+import { clearSession, getSessionToken, verifySession } from "@/lib/auth";
+import { handleError } from "@/lib/errorHandler";
 
 interface StudentProfile {
   id: string;
@@ -55,13 +57,21 @@ const StudentDashboard = () => {
   });
 
   useEffect(() => {
-    const studentLoggedIn = localStorage.getItem("studentLoggedIn");
-    if (!studentLoggedIn) {
-      navigate("/student-auth");
-      return;
-    }
-
-    fetchStudentData();
+    const checkAuth = async () => {
+      const token = getSessionToken();
+      if (!token) {
+        navigate("/student-auth");
+        return;
+      }
+      const result = await verifySession(token);
+      if (!result.valid || result.userType !== 'student') {
+        clearSession();
+        navigate("/student-auth");
+        return;
+      }
+      fetchStudentData();
+    };
+    checkAuth();
 
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -126,21 +136,14 @@ const StudentDashboard = () => {
         percentage: totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0
       });
     } catch (error) {
-      console.error("Error fetching student data:", error);
-      toast.error("Failed to load data");
+      handleError(error, "Failed to load data");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("studentLoggedIn");
-    localStorage.removeItem("studentId");
-    localStorage.removeItem("studentName");
-    localStorage.removeItem("studentClass");
-    localStorage.removeItem("studentSection");
-    localStorage.removeItem("studentRollNumber");
-    localStorage.removeItem("studentSchool");
+    clearSession();
     toast.success("Logged out successfully");
     navigate("/");
   };

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { db, AttendanceRecord, Student, AttendanceStatus } from "@/lib/db";
 import { toast } from "sonner";
+import { handleError } from "@/lib/errorHandler";
 
 export const useAttendance = () => {
   const [students, setStudents] = useState<Student[]>([]);
@@ -45,8 +46,7 @@ export const useAttendance = () => {
       setStudents(studentsData);
       setTodayAttendance(attendanceData);
     } catch (error) {
-      console.error("Error loading data:", error);
-      toast.error("Failed to load data");
+      handleError(error, "Failed to load data");
     } finally {
       setLoading(false);
     }
@@ -96,8 +96,7 @@ export const useAttendance = () => {
       const typeLabel = type === "entry" ? "Entry" : "Exit";
       toast.success(`${student.name} - ${typeLabel} marked as ${status}`);
     } catch (error) {
-      console.error("Error marking attendance:", error);
-      toast.error("Failed to mark attendance");
+      handleError(error, "Failed to mark attendance");
     }
   }, [students, todayAttendance, today, loadData]);
 

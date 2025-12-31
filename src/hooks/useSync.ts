@@ -35,8 +35,8 @@ export const useSync = () => {
     try {
       const records = await db.getUnsyncedRecords();
       setUnsyncedCount(records.length);
-    } catch (error) {
-      console.error("Error checking unsynced count:", error);
+    } catch {
+      // Silently handle error - non-critical operation
     }
   }, []);
 
@@ -63,18 +63,6 @@ export const useSync = () => {
       // Simulating API call with delay
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // For demo: simulate successful upload
-      console.log("Syncing records:", unsyncedRecords);
-      
-      // In production, you would:
-      // const response = await fetch("/api/attendance/sync", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ records: unsyncedRecords })
-      // });
-      // 
-      // if (!response.ok) throw new Error("Sync failed");
-
       // Mark records as synced
       const ids = unsyncedRecords.map(r => r.id!).filter(id => id !== undefined);
       await db.markAsSynced(ids);
@@ -83,8 +71,7 @@ export const useSync = () => {
       setUnsyncedCount(0);
       
       toast.success(`${unsyncedRecords.length} records synced successfully`);
-    } catch (error) {
-      console.error("Sync error:", error);
+    } catch {
       toast.error("Failed to sync data. Will retry automatically.");
     } finally {
       setIsSyncing(false);

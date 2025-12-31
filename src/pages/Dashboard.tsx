@@ -6,7 +6,7 @@ import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, Wif
 import { toast } from "sonner";
 import { useAttendance } from "@/hooks/useAttendance";
 import { useSync } from "@/hooks/useSync";
-
+import { clearSession, getSessionToken, verifySession } from "@/lib/auth";
 interface AttendanceStats {
   total: number;
   complete: number;
@@ -28,10 +28,19 @@ const Dashboard = () => {
   });
 
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("teacherLoggedIn");
-    if (!isLoggedIn) {
-      navigate("/login");
-    }
+    const checkAuth = async () => {
+      const token = getSessionToken();
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+      const result = await verifySession(token);
+      if (!result.valid || result.userType !== 'teacher') {
+        clearSession();
+        navigate("/login");
+      }
+    };
+    checkAuth();
   }, [navigate]);
 
   useEffect(() => {
@@ -46,10 +55,7 @@ const Dashboard = () => {
   const teacherClass = localStorage.getItem("teacherClass") || "";
 
   const handleLogout = () => {
-    localStorage.removeItem("teacherLoggedIn");
-    localStorage.removeItem("teacherId");
-    localStorage.removeItem("teacherName");
-    localStorage.removeItem("teacherClass");
+    clearSession();
     toast.success("Logged out successfully");
     navigate("/login");
   };
