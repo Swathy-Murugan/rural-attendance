@@ -6,7 +6,9 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { School, Lock, User, Hash, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { teacherSignUp, teacherSignIn, saveSession } from "@/lib/auth";
+import { teacherSignUpSchema, teacherSignInSchema } from "@/lib/validation";
+import { handleError } from "@/lib/errorHandler";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -25,32 +27,47 @@ const Login = () => {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate inputs
+    const validation = teacherSignInSchema.safeParse({
+      teacherId: signInTeacherId,
+      password: signInPassword,
+    });
+    
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
-      const { data: teacher, error } = await supabase
-        .from("teachers")
-        .select("*")
-        .eq("teacher_id", signInTeacherId.toUpperCase())
-        .eq("password", signInPassword)
-        .maybeSingle();
+      const result = await teacherSignIn({
+        teacher_id: signInTeacherId.toUpperCase(),
+        password: signInPassword,
+      });
 
-      if (error) throw error;
-      
-      if (teacher) {
-        localStorage.setItem("teacherLoggedIn", "true");
-        localStorage.setItem("teacherId", teacher.id);
-        localStorage.setItem("teacherName", teacher.name);
-        localStorage.setItem("teacherClass", teacher.assigned_class || "");
-        toast.success(`Welcome, ${teacher.name}!`);
-        navigate("/dashboard");
-      } else {
-        toast.error("Invalid Teacher ID or Password");
+      if (result.error) {
+        toast.error(result.error);
         setSignInPassword("");
+        return;
+      }
+      
+      if (result.success && result.user && result.sessionToken) {
+        // Store session securely
+        saveSession(result.sessionToken, 'teacher');
+        
+        // Store non-sensitive user info for display purposes
+        localStorage.setItem("teacherLoggedIn", "true");
+        localStorage.setItem("teacherId", result.user.id);
+        localStorage.setItem("teacherName", result.user.name);
+        localStorage.setItem("teacherClass", (result.user.assigned_class as string) || "");
+        
+        toast.success(`Welcome, ${result.user.name}!`);
+        navigate("/dashboard");
       }
     } catch (error) {
-      console.error("Login error:", error);
-      toast.error("Login failed. Please try again.");
+      handleError(error, "Login failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -59,56 +76,49 @@ const Login = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (signUpPassword !== signUpConfirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
-    if (signUpPassword.length < 4) {
-      toast.error("Password must be at least 4 characters");
+    // Validate inputs
+    const validation = teacherSignUpSchema.safeParse({
+      name: signUpName,
+      teacherId: signUpTeacherId,
+      password: signUpPassword,
+      confirmPassword: signUpConfirmPassword,
+      assignedClass: signUpAssignedClass || undefined,
+    });
+    
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Check if teacher ID already exists
-      const { data: existingTeacher } = await supabase
-        .from("teachers")
-        .select("id")
-        .eq("teacher_id", signUpTeacherId.toUpperCase())
-        .maybeSingle();
+      const result = await teacherSignUp({
+        name: signUpName.trim(),
+        teacher_id: signUpTeacherId.toUpperCase(),
+        password: signUpPassword,
+        assigned_class: signUpAssignedClass.trim() || undefined,
+      });
 
-      if (existingTeacher) {
-        toast.error("This Teacher ID is already registered");
-        setIsLoading(false);
+      if (result.error) {
+        toast.error(result.error);
         return;
       }
 
-      // Insert new teacher
-      const { data: newTeacher, error: insertError } = await supabase
-        .from("teachers")
-        .insert({
-          name: signUpName.trim(),
-          teacher_id: signUpTeacherId.toUpperCase(),
-          password: signUpPassword,
-          assigned_class: signUpAssignedClass.trim() || null
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      localStorage.setItem("teacherLoggedIn", "true");
-      localStorage.setItem("teacherId", newTeacher.id);
-      localStorage.setItem("teacherName", newTeacher.name);
-      localStorage.setItem("teacherClass", newTeacher.assigned_class || "");
-      
-      toast.success("Registration successful! Welcome!");
-      navigate("/dashboard");
+      if (result.success && result.user && result.sessionToken) {
+        // Store session securely
+        saveSession(result.sessionToken, 'teacher');
+        
+        localStorage.setItem("teacherLoggedIn", "true");
+        localStorage.setItem("teacherId", result.user.id);
+        localStorage.setItem("teacherName", result.user.name);
+        localStorage.setItem("teacherClass", (result.user.assigned_class as string) || "");
+        
+        toast.success("Registration successful! Welcome!");
+        navigate("/dashboard");
+      }
     } catch (error) {
-      console.error("Sign up error:", error);
-      toast.error("Registration failed. Please try again.");
+      handleError(error, "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -145,6 +155,7 @@ const Login = () => {
                   placeholder="Enter your Teacher ID"
                   className="h-12 text-lg"
                   required
+                  maxLength={20}
                 />
               </div>
 
@@ -160,6 +171,7 @@ const Login = () => {
                   placeholder="Enter your Password"
                   className="h-12 text-lg"
                   required
+                  maxLength={100}
                 />
               </div>
 
@@ -187,6 +199,7 @@ const Login = () => {
                   placeholder="Enter your full name"
                   className="h-11"
                   required
+                  maxLength={100}
                 />
               </div>
 
@@ -202,6 +215,7 @@ const Login = () => {
                   placeholder="Create a Teacher ID (e.g., T001)"
                   className="h-11"
                   required
+                  maxLength={20}
                 />
               </div>
 
@@ -216,13 +230,14 @@ const Login = () => {
                   onChange={(e) => setSignUpAssignedClass(e.target.value)}
                   placeholder="e.g., 10-A"
                   className="h-11"
+                  maxLength={10}
                 />
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground flex items-center gap-2">
                   <Lock className="w-4 h-4" />
-                  Password
+                  Password (min. 6 characters)
                 </label>
                 <Input
                   type="password"
@@ -231,6 +246,7 @@ const Login = () => {
                   placeholder="Create a password"
                   className="h-11"
                   required
+                  maxLength={100}
                 />
               </div>
 
@@ -243,6 +259,7 @@ const Login = () => {
                   placeholder="Confirm your password"
                   className="h-11"
                   required
+                  maxLength={100}
                 />
               </div>
 

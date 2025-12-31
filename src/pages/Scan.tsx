@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/card";
 import { QrCode, ArrowLeft, CheckCircle, Camera, Wifi, WifiOff, LogIn, LogOut } from "lucide-react";
 import { useAttendance } from "@/hooks/useAttendance";
 import { useSync } from "@/hooks/useSync";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getSessionToken, verifySession, clearSession } from "@/lib/auth";
 
 const Scan = () => {
   const navigate = useNavigate();
@@ -17,10 +18,19 @@ const Scan = () => {
   const [lastScanType, setLastScanType] = useState<"entry" | "exit">("entry");
 
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("teacherLoggedIn");
-    if (!isLoggedIn) {
-      navigate("/login");
-    }
+    const checkAuth = async () => {
+      const token = getSessionToken();
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+      const result = await verifySession(token);
+      if (!result.valid || result.userType !== 'teacher') {
+        clearSession();
+        navigate("/login");
+      }
+    };
+    checkAuth();
   }, [navigate]);
 
   const handleStartScan = () => {

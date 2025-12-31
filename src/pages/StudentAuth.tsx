@@ -6,8 +6,10 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GraduationCap, User, Hash, Building, Lock, QrCode, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import QRCode from "qrcode";
+import { studentSignUp, studentSignIn, saveSession, updateStudentQRCode } from "@/lib/auth";
+import { studentSignUpSchema, studentSignInSchema } from "@/lib/validation";
+import { handleError } from "@/lib/errorHandler";
 
 const StudentAuth = () => {
   const navigate = useNavigate();
@@ -24,18 +26,20 @@ const StudentAuth = () => {
     confirmPassword: "",
   });
 
-  // Sign In state - only roll number and password (removed school name)
+  // Sign In state
   const [signInData, setSignInData] = useState({
     rollNumber: "",
     password: "",
   });
 
   const generateQRCode = async (studentId: string, rollNumber: string, name: string) => {
+    // Include timestamp for uniqueness
     const qrData = JSON.stringify({
       id: studentId,
       roll: rollNumber,
       name: name,
-      type: "student"
+      type: "student",
+      ts: Date.now()
     });
     return await QRCode.toDataURL(qrData, { width: 300, margin: 2 });
   };
@@ -43,65 +47,59 @@ const StudentAuth = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (signUpData.password !== signUpData.confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
-    if (signUpData.password.length < 4) {
-      toast.error("Password must be at least 4 characters");
+    // Validate inputs
+    const validation = studentSignUpSchema.safeParse(signUpData);
+    
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Generate a temporary ID for QR code
+      // Generate a temporary QR code
       const tempId = crypto.randomUUID();
-      const qrCode = await generateQRCode(tempId, signUpData.rollNumber, signUpData.name);
+      const tempQrCode = await generateQRCode(tempId, signUpData.rollNumber, signUpData.name);
 
-      const { data, error } = await supabase
-        .from("students")
-        .insert({
-          name: signUpData.name.trim(),
-          class: signUpData.studentClass.trim(),
-          section: signUpData.section.trim().toUpperCase(),
-          roll_number: signUpData.rollNumber.trim(),
-          school_name: signUpData.schoolName.trim(),
-          password: signUpData.password,
-          qr_code: qrCode,
-        })
-        .select()
-        .single();
+      const result = await studentSignUp({
+        name: signUpData.name.trim(),
+        studentClass: signUpData.studentClass.trim(),
+        section: signUpData.section.trim().toUpperCase(),
+        roll_number: signUpData.rollNumber.trim(),
+        school_name: signUpData.schoolName.trim(),
+        password: signUpData.password,
+        qr_code: tempQrCode,
+      });
 
-      if (error) {
-        if (error.code === "23505") {
-          toast.error("A student with this roll number already exists at this school");
-        } else {
-          toast.error("Registration failed. Please try again.");
-        }
+      if (result.error) {
+        toast.error(result.error);
         return;
       }
 
-      // Update QR code with actual ID
-      const finalQrCode = await generateQRCode(data.id, data.roll_number, data.name);
-      await supabase
-        .from("students")
-        .update({ qr_code: finalQrCode })
-        .eq("id", data.id);
+      if (result.success && result.user) {
+        // Update QR code with actual student ID
+        const finalQrCode = await generateQRCode(
+          result.user.id, 
+          signUpData.rollNumber, 
+          signUpData.name
+        );
+        
+        await updateStudentQRCode(result.user.id, finalQrCode);
 
-      toast.success("Registration successful! You can now sign in.");
-      setSignUpData({
-        name: "",
-        studentClass: "",
-        section: "",
-        rollNumber: "",
-        schoolName: "",
-        password: "",
-        confirmPassword: "",
-      });
+        toast.success("Registration successful! You can now sign in.");
+        setSignUpData({
+          name: "",
+          studentClass: "",
+          section: "",
+          rollNumber: "",
+          schoolName: "",
+          password: "",
+          confirmPassword: "",
+        });
+      }
     } catch (error) {
-      toast.error("Registration failed. Please try again.");
+      handleError(error, "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -109,34 +107,46 @@ const StudentAuth = () => {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate inputs
+    const validation = studentSignInSchema.safeParse(signInData);
+    
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
+    
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from("students")
-        .select("*")
-        .eq("roll_number", signInData.rollNumber.trim())
-        .eq("password", signInData.password)
-        .maybeSingle();
+      const result = await studentSignIn({
+        roll_number: signInData.rollNumber.trim(),
+        password: signInData.password,
+      });
 
-      if (error || !data) {
-        toast.error("Invalid credentials. Please check your details.");
+      if (result.error) {
+        toast.error(result.error);
         return;
       }
 
-      // Store student session in localStorage
-      localStorage.setItem("studentLoggedIn", "true");
-      localStorage.setItem("studentId", data.id);
-      localStorage.setItem("studentName", data.name);
-      localStorage.setItem("studentClass", data.class);
-      localStorage.setItem("studentSection", data.section);
-      localStorage.setItem("studentRollNumber", data.roll_number);
-      localStorage.setItem("studentSchool", data.school_name);
+      if (result.success && result.user && result.sessionToken) {
+        // Store session securely
+        saveSession(result.sessionToken, 'student');
+        
+        // Store non-sensitive user info for display purposes
+        localStorage.setItem("studentLoggedIn", "true");
+        localStorage.setItem("studentId", result.user.id);
+        localStorage.setItem("studentName", result.user.name);
+        localStorage.setItem("studentClass", result.user.class as string);
+        localStorage.setItem("studentSection", result.user.section as string);
+        localStorage.setItem("studentRollNumber", result.user.roll_number as string);
+        localStorage.setItem("studentSchool", result.user.school_name as string);
 
-      toast.success(`Welcome, ${data.name}!`);
-      navigate("/student-dashboard");
+        toast.success(`Welcome, ${result.user.name}!`);
+        navigate("/student-dashboard");
+      }
     } catch (error) {
-      toast.error("Sign in failed. Please try again.");
+      handleError(error, "Sign in failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -173,6 +183,7 @@ const StudentAuth = () => {
                   placeholder="Enter your roll number"
                   className="h-11"
                   required
+                  maxLength={20}
                 />
               </div>
 
@@ -188,6 +199,7 @@ const StudentAuth = () => {
                   placeholder="Enter your password"
                   className="h-11"
                   required
+                  maxLength={100}
                 />
               </div>
 
@@ -215,6 +227,7 @@ const StudentAuth = () => {
                   placeholder="Enter your full name"
                   className="h-11"
                   required
+                  maxLength={100}
                 />
               </div>
 
@@ -228,6 +241,7 @@ const StudentAuth = () => {
                     placeholder="e.g., 5"
                     className="h-11"
                     required
+                    maxLength={10}
                   />
                 </div>
                 <div className="space-y-2">
@@ -256,6 +270,7 @@ const StudentAuth = () => {
                   placeholder="Enter your roll number"
                   className="h-11"
                   required
+                  maxLength={20}
                 />
               </div>
 
@@ -271,6 +286,7 @@ const StudentAuth = () => {
                   placeholder="Enter your school name"
                   className="h-11"
                   required
+                  maxLength={200}
                 />
               </div>
 
@@ -284,9 +300,10 @@ const StudentAuth = () => {
                     type="password"
                     value={signUpData.password}
                     onChange={(e) => setSignUpData({ ...signUpData, password: e.target.value })}
-                    placeholder="Password"
+                    placeholder="Min. 6 chars"
                     className="h-11"
                     required
+                    maxLength={100}
                   />
                 </div>
                 <div className="space-y-2">
@@ -298,6 +315,7 @@ const StudentAuth = () => {
                     placeholder="Confirm"
                     className="h-11"
                     required
+                    maxLength={100}
                   />
                 </div>
               </div>
