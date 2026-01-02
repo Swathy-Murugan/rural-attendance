@@ -399,6 +399,140 @@ Deno.serve(async (req) => {
         );
       }
       
+      case 'request-password-reset': {
+        const { user_type, identifier } = body;
+        
+        if (!user_type || !identifier) {
+          return new Response(
+            JSON.stringify({ error: 'Missing required fields' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const table = user_type === 'teacher' ? 'teachers' : 'students';
+        const idField = user_type === 'teacher' ? 'teacher_id' : 'roll_number';
+        
+        // Check if user exists
+        const { data: user, error: userError } = await supabase
+          .from(table)
+          .select('id')
+          .eq(idField, identifier.trim().toUpperCase())
+          .maybeSingle();
+        
+        if (userError || !user) {
+          return new Response(
+            JSON.stringify({ error: 'User not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Generate reset token (6 digit code)
+        const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+        
+        // Store reset token
+        const { error: updateError } = await supabase
+          .from(table)
+          .update({
+            password_reset_token: resetToken,
+            password_reset_expires: expiresAt.toISOString()
+          })
+          .eq('id', user.id);
+        
+        if (updateError) {
+          console.error('Reset token update error:', updateError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to generate reset token' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // In production, send via SMS/email. For demo, return token
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'Reset token generated',
+            reset_token: resetToken // Remove in production
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      case 'reset-password': {
+        const { user_type, identifier, reset_token, new_password } = body;
+        
+        if (!user_type || !identifier || !reset_token || !new_password) {
+          return new Response(
+            JSON.stringify({ error: 'Missing required fields' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        if (new_password.length < 6) {
+          return new Response(
+            JSON.stringify({ error: 'Password must be at least 6 characters' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const table = user_type === 'teacher' ? 'teachers' : 'students';
+        const idField = user_type === 'teacher' ? 'teacher_id' : 'roll_number';
+        
+        // Verify reset token
+        const { data: user, error: userError } = await supabase
+          .from(table)
+          .select('id, password_reset_token, password_reset_expires')
+          .eq(idField, identifier.trim().toUpperCase())
+          .maybeSingle();
+        
+        if (userError || !user) {
+          return new Response(
+            JSON.stringify({ error: 'User not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        if (!user.password_reset_token || user.password_reset_token !== reset_token) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid reset token' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        if (new Date(user.password_reset_expires) < new Date()) {
+          return new Response(
+            JSON.stringify({ error: 'Reset token has expired' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Hash new password
+        const hashedPassword = await hashPassword(new_password);
+        
+        // Update password and clear reset token
+        const { error: updateError } = await supabase
+          .from(table)
+          .update({
+            password: hashedPassword,
+            password_reset_token: null,
+            password_reset_expires: null
+          })
+          .eq('id', user.id);
+        
+        if (updateError) {
+          console.error('Password update error:', updateError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to reset password' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        return new Response(
+          JSON.stringify({ success: true, message: 'Password reset successfully' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       default:
         return new Response(
           JSON.stringify({ error: 'Unknown action' }),

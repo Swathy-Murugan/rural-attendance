@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { teacherSignUp, teacherSignIn, saveSession } from "@/lib/auth";
 import { teacherSignUpSchema, teacherSignInSchema } from "@/lib/validation";
 import { handleError } from "@/lib/errorHandler";
+import { ForgotPasswordDialog } from "@/components/ForgotPasswordDialog";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -182,6 +183,10 @@ const Login = () => {
               >
                 {isLoading ? "Signing In..." : "Sign In"}
               </Button>
+
+              <div className="text-center pt-2">
+                <ForgotPasswordDialog userType="teacher" />
+              </div>
             </form>
           </TabsContent>
 

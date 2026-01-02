@@ -1,22 +1,91 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Download, Calendar, TrendingUp } from "lucide-react";
+import { ArrowLeft, Download, Calendar, TrendingUp, AlertTriangle, Loader2, History } from "lucide-react";
 import { toast } from "sonner";
+import { getSessionToken, verifySession, clearSession } from "@/lib/auth";
+import { 
+  downloadDailyReport, 
+  downloadWeeklyReport, 
+  downloadMonthlyReport, 
+  downloadMidDayMealReport,
+  getAttendanceStats
+} from "@/lib/reportUtils";
+import { handleError } from "@/lib/errorHandler";
 
 const Reports = () => {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    averageAttendance: 0,
+    workingDays: 0,
+    lowAttendanceStudents: [] as Array<{
+      name: string;
+      rollNumber: string;
+      percentage: number;
+      present: number;
+      total: number;
+    }>
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const teacherClass = localStorage.getItem("teacherClass");
 
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("teacherLoggedIn");
-    if (!isLoggedIn) {
-      navigate("/login");
-    }
+    const checkAuth = async () => {
+      const token = getSessionToken();
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+      const result = await verifySession(token);
+      if (!result.valid || result.userType !== 'teacher') {
+        clearSession();
+        navigate("/login");
+        return;
+      }
+      loadStats();
+    };
+    checkAuth();
   }, [navigate]);
 
-  const handleDownload = (type: string) => {
-    toast.success(`${type} report downloaded`);
+  const loadStats = async () => {
+    try {
+      setStatsLoading(true);
+      const data = await getAttendanceStats(teacherClass || undefined);
+      setStats(data);
+    } catch (error) {
+      handleError(error, "Failed to load statistics");
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const handleDownload = async (type: "daily" | "weekly" | "monthly" | "midday") => {
+    setLoading(type);
+    try {
+      let count = 0;
+      switch (type) {
+        case "daily":
+          count = await downloadDailyReport(teacherClass || undefined);
+          break;
+        case "weekly":
+          count = await downloadWeeklyReport(teacherClass || undefined);
+          break;
+        case "monthly":
+          count = await downloadMonthlyReport(teacherClass || undefined);
+          break;
+        case "midday":
+          count = await downloadMidDayMealReport(teacherClass || undefined);
+          break;
+      }
+      toast.success(`Report downloaded with ${count} records`);
+    } catch (error) {
+      handleError(error, "Failed to download report");
+    } finally {
+      setLoading(null);
+    }
   };
 
   return (
@@ -46,7 +115,11 @@ const Reports = () => {
             <div className="flex items-center gap-3">
               <TrendingUp className="w-8 h-8" />
               <div>
-                <p className="text-2xl font-bold">84%</p>
+                {statsLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  <p className="text-2xl font-bold">{stats.averageAttendance}%</p>
+                )}
                 <p className="text-sm opacity-90">Average Attendance</p>
               </div>
             </div>
@@ -55,7 +128,11 @@ const Reports = () => {
             <div className="flex items-center gap-3">
               <Calendar className="w-8 h-8" />
               <div>
-                <p className="text-2xl font-bold">22</p>
+                {statsLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  <p className="text-2xl font-bold">{stats.workingDays}</p>
+                )}
                 <p className="text-sm opacity-90">Working Days</p>
               </div>
             </div>
@@ -72,9 +149,19 @@ const Reports = () => {
                 <p className="font-semibold">Daily Report</p>
                 <p className="text-sm text-muted-foreground">Today's attendance summary</p>
               </div>
-              <Button onClick={() => handleDownload("Daily")} className="h-12">
-                <Download className="w-5 h-5 mr-2" />
-                CSV
+              <Button 
+                onClick={() => handleDownload("daily")} 
+                className="h-12"
+                disabled={loading === "daily"}
+              >
+                {loading === "daily" ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Download className="w-5 h-5 mr-2" />
+                    CSV
+                  </>
+                )}
               </Button>
             </div>
 
@@ -83,9 +170,19 @@ const Reports = () => {
                 <p className="font-semibold">Weekly Report</p>
                 <p className="text-sm text-muted-foreground">Last 7 days overview</p>
               </div>
-              <Button onClick={() => handleDownload("Weekly")} className="h-12">
-                <Download className="w-5 h-5 mr-2" />
-                CSV
+              <Button 
+                onClick={() => handleDownload("weekly")} 
+                className="h-12"
+                disabled={loading === "weekly"}
+              >
+                {loading === "weekly" ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Download className="w-5 h-5 mr-2" />
+                    CSV
+                  </>
+                )}
               </Button>
             </div>
 
@@ -94,38 +191,89 @@ const Reports = () => {
                 <p className="font-semibold">Monthly Report</p>
                 <p className="text-sm text-muted-foreground">Full month statistics</p>
               </div>
-              <Button onClick={() => handleDownload("Monthly")} className="h-12">
-                <Download className="w-5 h-5 mr-2" />
-                CSV
+              <Button 
+                onClick={() => handleDownload("monthly")} 
+                className="h-12"
+                disabled={loading === "monthly"}
+              >
+                {loading === "monthly" ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Download className="w-5 h-5 mr-2" />
+                    CSV
+                  </>
+                )}
               </Button>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
               <div>
                 <p className="font-semibold">Mid-Day Meal Report</p>
-                <p className="text-sm text-muted-foreground">Government scheme data</p>
+                <p className="text-sm text-muted-foreground">Government scheme data (last 30 days)</p>
               </div>
               <Button 
-                onClick={() => handleDownload("Mid-Day Meal")} 
+                onClick={() => handleDownload("midday")} 
                 variant="secondary"
                 className="h-12"
+                disabled={loading === "midday"}
               >
-                <Download className="w-5 h-5 mr-2" />
-                PDF
+                {loading === "midday" ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Download className="w-5 h-5 mr-2" />
+                    CSV
+                  </>
+                )}
               </Button>
             </div>
           </div>
         </Card>
 
-        {/* Irregular Attendance Alert */}
-        <Card className="p-6 bg-warning text-warning-foreground">
-          <h3 className="font-bold text-lg mb-3">⚠️ Low Attendance Alert</h3>
-          <div className="space-y-2 text-sm">
-            <p>• Neha Patel - 45% attendance (9/20 days)</p>
-            <p>• Rohit Mehta - 60% attendance (12/20 days)</p>
-          </div>
-          <Button variant="outline" className="mt-4 w-full h-12">
-            View Full Details
+        {/* Low Attendance Alert */}
+        {stats.lowAttendanceStudents.length > 0 && (
+          <Card className="p-6 bg-warning/10 border-warning">
+            <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-warning" />
+              Low Attendance Alert (&lt;75%)
+            </h3>
+            <div className="space-y-2">
+              {stats.lowAttendanceStudents.slice(0, 5).map((student, index) => (
+                <div 
+                  key={index}
+                  className="flex items-center justify-between p-3 bg-background rounded-lg"
+                >
+                  <div>
+                    <p className="font-medium">{student.name}</p>
+                    <p className="text-sm text-muted-foreground">Roll: {student.rollNumber}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-destructive">{student.percentage}%</p>
+                    <p className="text-xs text-muted-foreground">
+                      {student.present}/{student.total} days
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {stats.lowAttendanceStudents.length > 5 && (
+              <p className="text-sm text-muted-foreground mt-3 text-center">
+                +{stats.lowAttendanceStudents.length - 5} more students with low attendance
+              </p>
+            )}
+          </Card>
+        )}
+
+        {/* View History Link */}
+        <Card className="p-4">
+          <Button 
+            variant="outline" 
+            className="w-full h-12"
+            onClick={() => navigate("/students")}
+          >
+            <History className="w-5 h-5 mr-2" />
+            View Student Attendance Details
           </Button>
         </Card>
       </div>

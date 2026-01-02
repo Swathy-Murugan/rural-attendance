@@ -10,6 +10,7 @@ import QRCode from "qrcode";
 import { studentSignUp, studentSignIn, saveSession, updateStudentQRCode } from "@/lib/auth";
 import { studentSignUpSchema, studentSignInSchema } from "@/lib/validation";
 import { handleError } from "@/lib/errorHandler";
+import { ForgotPasswordDialog } from "@/components/ForgotPasswordDialog";
 
 const StudentAuth = () => {
   const navigate = useNavigate();
@@ -210,6 +211,10 @@ const StudentAuth = () => {
               >
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
+
+              <div className="text-center pt-2">
+                <ForgotPasswordDialog userType="student" />
+              </div>
             </form>
           </TabsContent>
 

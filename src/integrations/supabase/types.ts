@@ -66,12 +66,15 @@ export type Database = {
           id: string
           name: string
           password: string
+          password_reset_expires: string | null
+          password_reset_token: string | null
           present_days: number
           qr_code: string
           roll_number: string
           scholarship_eligible: boolean | null
           school_name: string
           section: string
+          teacher_id: string | null
           total_days: number
           updated_at: string
         }
@@ -82,12 +85,15 @@ export type Database = {
           id?: string
           name: string
           password: string
+          password_reset_expires?: string | null
+          password_reset_token?: string | null
           present_days?: number
           qr_code: string
           roll_number: string
           scholarship_eligible?: boolean | null
           school_name: string
           section: string
+          teacher_id?: string | null
           total_days?: number
           updated_at?: string
         }
@@ -98,16 +104,27 @@ export type Database = {
           id?: string
           name?: string
           password?: string
+          password_reset_expires?: string | null
+          password_reset_token?: string | null
           present_days?: number
           qr_code?: string
           roll_number?: string
           scholarship_eligible?: boolean | null
           school_name?: string
           section?: string
+          teacher_id?: string | null
           total_days?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "students_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       teachers: {
         Row: {
@@ -116,6 +133,8 @@ export type Database = {
           id: string
           name: string
           password: string
+          password_reset_expires: string | null
+          password_reset_token: string | null
           teacher_id: string
           updated_at: string
         }
@@ -125,6 +144,8 @@ export type Database = {
           id?: string
           name: string
           password: string
+          password_reset_expires?: string | null
+          password_reset_token?: string | null
           teacher_id: string
           updated_at?: string
         }
@@ -134,6 +155,8 @@ export type Database = {
           id?: string
           name?: string
           password?: string
+          password_reset_expires?: string | null
+          password_reset_token?: string | null
           teacher_id?: string
           updated_at?: string
         }
