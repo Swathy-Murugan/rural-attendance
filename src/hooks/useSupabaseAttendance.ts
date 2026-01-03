@@ -13,6 +13,9 @@ export interface Student {
   section: string;
   school_name: string;
   teacher_id?: string;
+  present_days?: number;
+  absent_days?: number;
+  total_days?: number;
 }
 
 export interface AttendanceRecord {
@@ -30,6 +33,7 @@ export const useSupabaseAttendance = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
   const teacherId = localStorage.getItem("teacherId");
@@ -42,7 +46,7 @@ export const useSupabaseAttendance = () => {
     try {
       let query = supabase
         .from("students")
-        .select("id, name, roll_number, class, section, school_name, teacher_id");
+        .select("id, name, roll_number, class, section, school_name, teacher_id, present_days, absent_days, total_days");
 
       // If teacher has a class assigned, filter by class OR teacher_id
       if (teacherClass) {
@@ -150,15 +154,128 @@ export const useSupabaseAttendance = () => {
           .insert(insertData);
 
         if (error) throw error;
+
+        // Update student counts for new records
+        if (status === "present") {
+          await supabase
+            .from("students")
+            .update({
+              present_days: (student.present_days || 0) + 1,
+              total_days: (student.total_days || 0) + 1
+            })
+            .eq("id", studentId);
+        } else {
+          await supabase
+            .from("students")
+            .update({
+              absent_days: (student.absent_days || 0) + 1,
+              total_days: (student.total_days || 0) + 1
+            })
+            .eq("id", studentId);
+        }
       }
 
       await loadTodayAttendance();
+      await loadStudents();
       const typeLabel = type === "entry" ? "Entry" : "Exit";
       toast.success(`${student.name} - ${typeLabel} marked as ${status}`);
     } catch (error) {
       handleError(error, "Failed to mark attendance");
     }
-  }, [students, todayAttendance, today, teacherId, loadTodayAttendance]);
+  }, [students, todayAttendance, today, teacherId, loadTodayAttendance, loadStudents]);
+
+  // Edit attendance for current day only - change absent to present or vice versa
+  const editAttendance = useCallback(async (
+    studentId: string,
+    newStatus: "present" | "absent"
+  ): Promise<boolean> => {
+    try {
+      setUpdating(true);
+      const student = students.find(s => s.id === studentId);
+      if (!student) {
+        toast.error("Student not found");
+        return false;
+      }
+
+      const existingRecord = todayAttendance.find(a => a.student_id === studentId);
+      if (!existingRecord) {
+        toast.error("No attendance record found for today");
+        return false;
+      }
+
+      const currentStatus = existingRecord.status;
+      const isCurrentlyAbsent = currentStatus === "absent";
+      const isCurrentlyPresent = currentStatus === "entry-only" || currentStatus === "complete" || currentStatus === "exit-only";
+
+      // Prevent no-op changes
+      if ((newStatus === "absent" && isCurrentlyAbsent) || 
+          (newStatus === "present" && isCurrentlyPresent)) {
+        toast.info(`Student is already marked as ${newStatus}`);
+        return false;
+      }
+
+      const now = new Date().toISOString();
+
+      // Update the attendance record
+      const updateData: Record<string, unknown> = {
+        marked_by: teacherId,
+        synced: true
+      };
+
+      if (newStatus === "present") {
+        // Changing from absent to present
+        updateData.status = "entry-only";
+        updateData.entry_time = now;
+        updateData.exit_time = null;
+      } else {
+        // Changing from present to absent
+        updateData.status = "absent";
+        updateData.entry_time = null;
+        updateData.exit_time = null;
+      }
+
+      const { error: attendanceError } = await supabase
+        .from("student_attendance")
+        .update(updateData)
+        .eq("id", existingRecord.id);
+
+      if (attendanceError) throw attendanceError;
+
+      // Update student counts
+      let newPresentDays = student.present_days || 0;
+      let newAbsentDays = student.absent_days || 0;
+
+      if (isCurrentlyAbsent && newStatus === "present") {
+        // Changing from absent to present
+        newPresentDays = newPresentDays + 1;
+        newAbsentDays = Math.max(0, newAbsentDays - 1);
+      } else if (isCurrentlyPresent && newStatus === "absent") {
+        // Changing from present to absent
+        newPresentDays = Math.max(0, newPresentDays - 1);
+        newAbsentDays = newAbsentDays + 1;
+      }
+
+      const { error: studentError } = await supabase
+        .from("students")
+        .update({
+          present_days: newPresentDays,
+          absent_days: newAbsentDays
+        })
+        .eq("id", studentId);
+
+      if (studentError) throw studentError;
+
+      await Promise.all([loadTodayAttendance(), loadStudents()]);
+      
+      toast.success(`${student.name}'s attendance changed to ${newStatus}`);
+      return true;
+    } catch (error) {
+      handleError(error, "Failed to update attendance");
+      return false;
+    } finally {
+      setUpdating(false);
+    }
+  }, [students, todayAttendance, teacherId, loadTodayAttendance, loadStudents]);
 
   // Get student attendance status
   const getStudentStatus = useCallback((studentId: string): AttendanceStatus => {
@@ -248,7 +365,9 @@ export const useSupabaseAttendance = () => {
     students,
     todayAttendance,
     loading,
+    updating,
     markAttendance,
+    editAttendance,
     getStudentStatus,
     hasMarkedType,
     getTodayStats,
