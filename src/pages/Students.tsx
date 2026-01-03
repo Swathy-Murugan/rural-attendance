@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, LogIn, LogOut as LogOutIcon, XCircle, User, Wifi, WifiOff, CloudUpload, CheckCircle, Clock, History, Trash2 } from "lucide-react";
+import { ArrowLeft, LogIn, LogOut as LogOutIcon, XCircle, User, Wifi, WifiOff, CloudUpload, CheckCircle, Clock, History, Trash2, Edit2 } from "lucide-react";
 import { useSupabaseAttendance, AttendanceStatus } from "@/hooks/useSupabaseAttendance";
 import { useSync } from "@/hooks/useSync";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AddStudentDialog } from "@/components/AddStudentDialog";
+import { EditAttendanceDialog } from "@/components/EditAttendanceDialog";
 import { getSessionToken, verifySession, clearSession } from "@/lib/auth";
 import {
   AlertDialog,
@@ -25,7 +26,9 @@ const Students = () => {
   const { 
     students, 
     loading, 
+    updating,
     markAttendance, 
+    editAttendance,
     getStudentStatus, 
     hasMarkedType, 
     addStudent,
@@ -33,6 +36,15 @@ const Students = () => {
   } = useSupabaseAttendance();
   const { isOnline, isSyncing, unsyncedCount } = useSync();
   const [activeTab, setActiveTab] = useState<"entry" | "exit">("entry");
+  
+  // Edit attendance dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<{
+    id: string;
+    name: string;
+    currentStatus: AttendanceStatus;
+    newStatus: "present" | "absent";
+  } | null>(null);
 
   const teacherClass = localStorage.getItem("teacherClass") || "";
   const [defaultClass, defaultSection] = teacherClass.split("-");
@@ -73,6 +85,31 @@ const Students = () => {
     }
   };
 
+  // Open edit dialog with proper new status
+  const openEditDialog = (studentId: string, studentName: string, currentStatus: AttendanceStatus) => {
+    // Determine what the new status should be (toggle)
+    const newStatus: "present" | "absent" = currentStatus === "absent" ? "present" : "absent";
+    
+    setEditingStudent({
+      id: studentId,
+      name: studentName,
+      currentStatus,
+      newStatus
+    });
+    setEditDialogOpen(true);
+  };
+
+  // Handle confirmed edit
+  const handleEditConfirm = async () => {
+    if (!editingStudent) return;
+    
+    const success = await editAttendance(editingStudent.id, editingStudent.newStatus);
+    if (success) {
+      setEditDialogOpen(false);
+      setEditingStudent(null);
+    }
+  };
+
   const studentsWithStatus = students.map(student => ({
     ...student,
     status: getStudentStatus(student.id),
@@ -84,6 +121,11 @@ const Students = () => {
   const entryOnlyCount = studentsWithStatus.filter(s => s.status === "entry-only").length;
   const absentCount = studentsWithStatus.filter(s => s.status === "absent").length;
   const unmarkedCount = studentsWithStatus.filter(s => s.status === "unmarked").length;
+
+  // Check if a student's attendance can be edited (has a record for today)
+  const canEditAttendance = (status: AttendanceStatus) => {
+    return status !== "unmarked";
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -236,6 +278,18 @@ const Students = () => {
                           >
                             <XCircle className="w-6 h-6" />
                           </Button>
+                          {/* Edit/Revert Button - only show if attendance is marked */}
+                          {canEditAttendance(student.status) && (
+                            <Button
+                              size="lg"
+                              variant="outline"
+                              className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
+                              onClick={() => openEditDialog(student.id, student.name, student.status)}
+                              title={student.status === "absent" ? "Change to Present" : "Change to Absent"}
+                            >
+                              <Edit2 className="w-5 h-5" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -292,6 +346,18 @@ const Students = () => {
                           >
                             {student.hasExit ? <CheckCircle className="w-6 h-6" /> : <LogOutIcon className="w-6 h-6" />}
                           </Button>
+                          {/* Edit/Revert Button - only show if attendance is marked */}
+                          {canEditAttendance(student.status) && (
+                            <Button
+                              size="lg"
+                              variant="outline"
+                              className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
+                              onClick={() => openEditDialog(student.id, student.name, student.status)}
+                              title={student.status === "absent" ? "Change to Present" : "Change to Absent"}
+                            >
+                              <Edit2 className="w-5 h-5" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -347,11 +413,23 @@ const Students = () => {
                 <li>• <span className="text-primary font-medium">Entry Only</span> - Student has entered, awaiting exit</li>
                 <li>• <span className="text-success font-medium">Verified</span> - Both entry and exit recorded</li>
                 <li>• <span className="text-destructive font-medium">Absent</span> - Student marked absent</li>
+                <li>• <Edit2 className="w-4 h-4 inline text-amber-600" /> <span className="text-amber-600 font-medium">Edit</span> - Change attendance status (today only)</li>
               </ul>
             </Card>
           </>
         )}
       </div>
+
+      {/* Edit Attendance Confirmation Dialog */}
+      <EditAttendanceDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        studentName={editingStudent?.name || ""}
+        currentStatus={editingStudent?.currentStatus || "unmarked"}
+        newStatus={editingStudent?.newStatus || "present"}
+        onConfirm={handleEditConfirm}
+        isLoading={updating}
+      />
     </div>
   );
 };
