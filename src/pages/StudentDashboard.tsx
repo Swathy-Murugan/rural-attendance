@@ -15,8 +15,10 @@ import {
   Award,
   Wifi,
   WifiOff,
-  Download
+  Download,
+  Key
 } from "lucide-react";
+import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO } from "date-fns";
@@ -449,7 +451,14 @@ const StudentDashboard = () => {
                   <p className="font-medium">{profile?.school_name}</p>
                 </div>
 
-                <div className="pt-4 border-t">
+                <div className="pt-4 border-t space-y-3">
+                  {profile && (
+                    <ChangePasswordDialog 
+                      studentId={profile.id} 
+                      studentName={profile.name} 
+                    />
+                  )}
+                  
                   <Button variant="destructive" onClick={handleLogout} className="w-full">
                     <LogOut className="w-4 h-4 mr-2" />
                     Sign Out

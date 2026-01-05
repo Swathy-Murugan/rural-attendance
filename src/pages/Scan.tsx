@@ -2,15 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { QrCode, ArrowLeft, CheckCircle, Camera, Wifi, WifiOff, LogIn, LogOut } from "lucide-react";
-import { useAttendance } from "@/hooks/useAttendance";
+import { QrCode, ArrowLeft, CheckCircle, Camera, Wifi, WifiOff, LogIn, LogOut, User } from "lucide-react";
+import { useSupabaseAttendance } from "@/hooks/useSupabaseAttendance";
 import { useSync } from "@/hooks/useSync";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getSessionToken, verifySession, clearSession } from "@/lib/auth";
 
 const Scan = () => {
   const navigate = useNavigate();
-  const { students, markAttendance, hasMarkedType } = useAttendance();
+  const { students, markAttendance, hasMarkedType, loading } = useSupabaseAttendance();
   const { isOnline } = useSync();
   const [scanning, setScanning] = useState(false);
   const [scannedStudent, setScannedStudent] = useState<string | null>(null);
@@ -164,11 +164,25 @@ const Scan = () => {
           <Button 
             className="w-full h-16 text-lg font-semibold"
             onClick={handleStartScan}
-            disabled={scanning}
+            disabled={scanning || students.length === 0}
           >
             {scanning ? "Scanning..." : scannedStudent ? "Scan Next Student" : "Start Camera"}
           </Button>
         </Card>
+
+        {/* No Students Warning */}
+        {!loading && students.length === 0 && (
+          <Card className="p-6 text-center">
+            <User className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-bold mb-2">No Students Added</h3>
+            <p className="text-muted-foreground mb-4">
+              Add students from the Student List page first before scanning.
+            </p>
+            <Button onClick={() => navigate("/students")}>
+              Go to Student List
+            </Button>
+          </Card>
+        )}
 
         {/* Instructions */}
         <Card className="p-6 bg-accent text-accent-foreground">
@@ -177,7 +191,7 @@ const Scan = () => {
             <li>• <strong>Entry Scan:</strong> Use when students arrive at school</li>
             <li>• <strong>Exit Scan:</strong> Use when students leave (requires entry first)</li>
             <li>• Attendance is only valid when both scans are recorded</li>
-            <li>• Works offline - syncs when connected</li>
+            <li>• Only students added by you will appear here</li>
           </ul>
         </Card>
 
