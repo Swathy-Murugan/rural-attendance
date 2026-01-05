@@ -117,10 +117,17 @@ const Students = () => {
     hasExit: hasMarkedType(student.id, "exit")
   }));
 
+  // Separate students by status for grouped display
+  const unmarkedStudents = studentsWithStatus.filter(s => s.status === "unmarked");
+  const absentStudents = studentsWithStatus.filter(s => s.status === "absent");
+  const markedStudents = studentsWithStatus.filter(s => 
+    s.status === "complete" || s.status === "entry-only" || s.status === "exit-only"
+  );
+
   const completeCount = studentsWithStatus.filter(s => s.status === "complete").length;
   const entryOnlyCount = studentsWithStatus.filter(s => s.status === "entry-only").length;
-  const absentCount = studentsWithStatus.filter(s => s.status === "absent").length;
-  const unmarkedCount = studentsWithStatus.filter(s => s.status === "unmarked").length;
+  const absentCount = absentStudents.length;
+  const unmarkedCount = unmarkedStudents.length;
 
   // Check if a student's attendance can be edited (has a record for today)
   const canEditAttendance = (status: AttendanceStatus) => {
@@ -231,7 +238,7 @@ const Students = () => {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="entry" className="space-y-3 mt-4">
+            <TabsContent value="entry" className="space-y-3 mt-4">
                 <p className="text-sm text-muted-foreground text-center mb-4">
                   Mark student entry when they arrive at school
                 </p>
@@ -240,69 +247,169 @@ const Students = () => {
                     Loading students...
                   </Card>
                 ) : (
-                  studentsWithStatus.map((student) => (
-                    <Card key={student.id} className="p-4">
-                      <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-full ${getStatusColor(student.status)}`}>
-                          {student.status === "unmarked" ? (
-                            <Clock className="w-6 h-6" />
-                          ) : (
-                            <User className="w-6 h-6" />
-                          )}
+                  <>
+                    {/* Not Marked Section */}
+                    {unmarkedStudents.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 px-2">
+                          <Clock className="w-5 h-5 text-warning" />
+                          <h3 className="font-bold text-lg text-warning">Not Marked ({unmarkedStudents.length})</h3>
                         </div>
-                        
-                        <div className="flex-1">
-                          <h3 className="font-bold text-lg">{student.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Roll No: {student.roll_number} • {student.class}-{student.section}
-                          </p>
-                          <span className={`text-xs px-2 py-1 rounded-full mt-1 inline-block ${getStatusColor(student.status)}`}>
-                            {getStatusLabel(student.status)}
-                          </span>
-                        </div>
+                        {unmarkedStudents.map((student) => (
+                          <Card key={student.id} className="p-4 border-l-4 border-l-warning">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 rounded-full bg-warning text-warning-foreground">
+                                <Clock className="w-6 h-6" />
+                              </div>
+                              
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg">{student.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Roll No: {student.roll_number} • {student.class}-{student.section}
+                                </p>
+                                <span className="text-xs px-2 py-1 rounded-full mt-1 inline-block bg-warning text-warning-foreground">
+                                  ⚠ Unmarked
+                                </span>
+                              </div>
 
-                        <div className="flex gap-2">
-                          <Button
-                            size="lg"
-                            className="bg-success hover:bg-success/90 text-success-foreground h-14 w-14"
-                            onClick={() => markAttendance(student.id, "present", "entry")}
-                            disabled={student.hasEntry || student.status === "absent"}
-                          >
-                            {student.hasEntry ? <CheckCircle className="w-6 h-6" /> : <LogIn className="w-6 h-6" />}
-                          </Button>
-                          <Button
-                            size="lg"
-                            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground h-14 w-14"
-                            onClick={() => markAttendance(student.id, "absent", "entry")}
-                            disabled={student.hasEntry || student.status === "absent"}
-                          >
-                            <XCircle className="w-6 h-6" />
-                          </Button>
-                          {/* Edit/Revert Button - only show if attendance is marked */}
-                          {canEditAttendance(student.status) && (
-                            <Button
-                              size="lg"
-                              variant="outline"
-                              className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
-                              onClick={() => openEditDialog(student.id, student.name, student.status)}
-                              title={student.status === "absent" ? "Change to Present" : "Change to Absent"}
-                            >
-                              <Edit2 className="w-5 h-5" />
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-14 w-10"
-                            onClick={() => navigate(`/attendance-history?studentId=${student.id}`)}
-                            title="View History"
-                          >
-                            <History className="w-5 h-5" />
-                          </Button>
-                        </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="lg"
+                                  className="bg-success hover:bg-success/90 text-success-foreground h-14 w-14"
+                                  onClick={() => markAttendance(student.id, "present", "entry")}
+                                >
+                                  <LogIn className="w-6 h-6" />
+                                </Button>
+                                <Button
+                                  size="lg"
+                                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground h-14 w-14"
+                                  onClick={() => markAttendance(student.id, "absent", "entry")}
+                                >
+                                  <XCircle className="w-6 h-6" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-14 w-10"
+                                  onClick={() => navigate(`/attendance-history?studentId=${student.id}`)}
+                                  title="View History"
+                                >
+                                  <History className="w-5 h-5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
                       </div>
-                    </Card>
-                  ))
+                    )}
+
+                    {/* Absent Section */}
+                    {absentStudents.length > 0 && (
+                      <div className="space-y-3 mt-6">
+                        <div className="flex items-center gap-2 px-2">
+                          <XCircle className="w-5 h-5 text-destructive" />
+                          <h3 className="font-bold text-lg text-destructive">Absent ({absentStudents.length})</h3>
+                        </div>
+                        {absentStudents.map((student) => (
+                          <Card key={student.id} className="p-4 border-l-4 border-l-destructive">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 rounded-full bg-destructive text-destructive-foreground">
+                                <User className="w-6 h-6" />
+                              </div>
+                              
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg">{student.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Roll No: {student.roll_number} • {student.class}-{student.section}
+                                </p>
+                                <span className="text-xs px-2 py-1 rounded-full mt-1 inline-block bg-destructive text-destructive-foreground">
+                                  Absent
+                                </span>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button
+                                  size="lg"
+                                  variant="outline"
+                                  className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
+                                  onClick={() => openEditDialog(student.id, student.name, student.status)}
+                                  title="Change to Present"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-14 w-10"
+                                  onClick={() => navigate(`/attendance-history?studentId=${student.id}`)}
+                                  title="View History"
+                                >
+                                  <History className="w-5 h-5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Present/Entry Marked Section */}
+                    {markedStudents.length > 0 && (
+                      <div className="space-y-3 mt-6">
+                        <div className="flex items-center gap-2 px-2">
+                          <CheckCircle className="w-5 h-5 text-success" />
+                          <h3 className="font-bold text-lg text-success">Marked ({markedStudents.length})</h3>
+                        </div>
+                        {markedStudents.map((student) => (
+                          <Card key={student.id} className="p-4 border-l-4 border-l-success">
+                            <div className="flex items-center gap-4">
+                              <div className={`p-3 rounded-full ${getStatusColor(student.status)}`}>
+                                <User className="w-6 h-6" />
+                              </div>
+                              
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg">{student.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Roll No: {student.roll_number} • {student.class}-{student.section}
+                                </p>
+                                <span className={`text-xs px-2 py-1 rounded-full mt-1 inline-block ${getStatusColor(student.status)}`}>
+                                  {getStatusLabel(student.status)}
+                                </span>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button
+                                  size="lg"
+                                  className="bg-success hover:bg-success/90 text-success-foreground h-14 w-14"
+                                  disabled
+                                >
+                                  <CheckCircle className="w-6 h-6" />
+                                </Button>
+                                <Button
+                                  size="lg"
+                                  variant="outline"
+                                  className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
+                                  onClick={() => openEditDialog(student.id, student.name, student.status)}
+                                  title="Change to Absent"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-14 w-10"
+                                  onClick={() => navigate(`/attendance-history?studentId=${student.id}`)}
+                                  title="View History"
+                                >
+                                  <History className="w-5 h-5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </TabsContent>
 
@@ -315,92 +422,244 @@ const Students = () => {
                     Loading students...
                   </Card>
                 ) : (
-                  studentsWithStatus.map((student) => (
-                    <Card key={student.id} className="p-4">
-                      <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-full ${getStatusColor(student.status)}`}>
-                          {student.status === "unmarked" ? (
-                            <Clock className="w-6 h-6" />
-                          ) : (
-                            <User className="w-6 h-6" />
-                          )}
+                  <>
+                    {/* Entry Required Section (Unmarked) */}
+                    {unmarkedStudents.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 px-2">
+                          <Clock className="w-5 h-5 text-warning" />
+                          <h3 className="font-bold text-lg text-warning">Not Marked ({unmarkedStudents.length})</h3>
                         </div>
-                        
-                        <div className="flex-1">
-                          <h3 className="font-bold text-lg">{student.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Roll No: {student.roll_number} • {student.class}-{student.section}
-                          </p>
-                          <span className={`text-xs px-2 py-1 rounded-full mt-1 inline-block ${getStatusColor(student.status)}`}>
-                            {getStatusLabel(student.status)}
-                          </span>
-                        </div>
+                        {unmarkedStudents.map((student) => (
+                          <Card key={student.id} className="p-4 border-l-4 border-l-warning opacity-60">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 rounded-full bg-warning text-warning-foreground">
+                                <Clock className="w-6 h-6" />
+                              </div>
+                              
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg">{student.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Roll No: {student.roll_number} • {student.class}-{student.section}
+                                </p>
+                                <span className="text-xs px-2 py-1 rounded-full mt-1 inline-block bg-warning text-warning-foreground">
+                                  ⚠ Entry Required First
+                                </span>
+                              </div>
 
-                        <div className="flex gap-2">
-                          <Button
-                            size="lg"
-                            className="bg-success hover:bg-success/90 text-success-foreground h-14 w-14"
-                            onClick={() => markAttendance(student.id, "present", "exit")}
-                            disabled={student.hasExit || student.status === "absent" || !student.hasEntry}
-                            title={!student.hasEntry ? "Entry must be marked first" : ""}
-                          >
-                            {student.hasExit ? <CheckCircle className="w-6 h-6" /> : <LogOutIcon className="w-6 h-6" />}
-                          </Button>
-                          {/* Edit/Revert Button - only show if attendance is marked */}
-                          {canEditAttendance(student.status) && (
-                            <Button
-                              size="lg"
-                              variant="outline"
-                              className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
-                              onClick={() => openEditDialog(student.id, student.name, student.status)}
-                              title={student.status === "absent" ? "Change to Present" : "Change to Absent"}
-                            >
-                              <Edit2 className="w-5 h-5" />
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-14 w-10"
-                            onClick={() => navigate(`/attendance-history?studentId=${student.id}`)}
-                            title="View History"
-                          >
-                            <History className="w-5 h-5" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-14 w-10 text-destructive hover:text-destructive"
-                                title="Remove Student"
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Remove Student?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will remove {student.name} from your class list. 
-                                  The student account will remain active.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  onClick={() => removeStudent(student.id)}
-                                  className="bg-destructive text-destructive-foreground"
+                              <div className="flex gap-2">
+                                <Button
+                                  size="lg"
+                                  className="bg-muted text-muted-foreground h-14 w-14"
+                                  disabled
+                                  title="Entry must be marked first"
                                 >
-                                  Remove
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
+                                  <LogOutIcon className="w-6 h-6" />
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
                       </div>
-                    </Card>
-                  ))
+                    )}
+
+                    {/* Absent Section */}
+                    {absentStudents.length > 0 && (
+                      <div className="space-y-3 mt-6">
+                        <div className="flex items-center gap-2 px-2">
+                          <XCircle className="w-5 h-5 text-destructive" />
+                          <h3 className="font-bold text-lg text-destructive">Absent ({absentStudents.length})</h3>
+                        </div>
+                        {absentStudents.map((student) => (
+                          <Card key={student.id} className="p-4 border-l-4 border-l-destructive">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 rounded-full bg-destructive text-destructive-foreground">
+                                <User className="w-6 h-6" />
+                              </div>
+                              
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg">{student.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Roll No: {student.roll_number} • {student.class}-{student.section}
+                                </p>
+                                <span className="text-xs px-2 py-1 rounded-full mt-1 inline-block bg-destructive text-destructive-foreground">
+                                  Absent
+                                </span>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button
+                                  size="lg"
+                                  variant="outline"
+                                  className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
+                                  onClick={() => openEditDialog(student.id, student.name, student.status)}
+                                  title="Change to Present"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Entry Marked - Awaiting Exit */}
+                    {markedStudents.filter(s => s.status === "entry-only").length > 0 && (
+                      <div className="space-y-3 mt-6">
+                        <div className="flex items-center gap-2 px-2">
+                          <LogOutIcon className="w-5 h-5 text-primary" />
+                          <h3 className="font-bold text-lg text-primary">Awaiting Exit ({markedStudents.filter(s => s.status === "entry-only").length})</h3>
+                        </div>
+                        {markedStudents.filter(s => s.status === "entry-only").map((student) => (
+                          <Card key={student.id} className="p-4 border-l-4 border-l-primary">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 rounded-full bg-primary text-primary-foreground">
+                                <User className="w-6 h-6" />
+                              </div>
+                              
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg">{student.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Roll No: {student.roll_number} • {student.class}-{student.section}
+                                </p>
+                                <span className="text-xs px-2 py-1 rounded-full mt-1 inline-block bg-primary text-primary-foreground">
+                                  Entry Only
+                                </span>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button
+                                  size="lg"
+                                  className="bg-success hover:bg-success/90 text-success-foreground h-14 w-14"
+                                  onClick={() => markAttendance(student.id, "present", "exit")}
+                                >
+                                  <LogOutIcon className="w-6 h-6" />
+                                </Button>
+                                <Button
+                                  size="lg"
+                                  variant="outline"
+                                  className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
+                                  onClick={() => openEditDialog(student.id, student.name, student.status)}
+                                  title="Change to Absent"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-14 w-10 text-destructive hover:text-destructive"
+                                      title="Remove Student"
+                                    >
+                                      <Trash2 className="w-5 h-5" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Remove Student?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will remove {student.name} from your class list. 
+                                        The student account will remain active.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction 
+                                        onClick={() => removeStudent(student.id)}
+                                        className="bg-destructive text-destructive-foreground"
+                                      >
+                                        Remove
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Completed Section */}
+                    {markedStudents.filter(s => s.status === "complete").length > 0 && (
+                      <div className="space-y-3 mt-6">
+                        <div className="flex items-center gap-2 px-2">
+                          <CheckCircle className="w-5 h-5 text-success" />
+                          <h3 className="font-bold text-lg text-success">Verified ({markedStudents.filter(s => s.status === "complete").length})</h3>
+                        </div>
+                        {markedStudents.filter(s => s.status === "complete").map((student) => (
+                          <Card key={student.id} className="p-4 border-l-4 border-l-success">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 rounded-full bg-success text-success-foreground">
+                                <CheckCircle className="w-6 h-6" />
+                              </div>
+                              
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg">{student.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Roll No: {student.roll_number} • {student.class}-{student.section}
+                                </p>
+                                <span className="text-xs px-2 py-1 rounded-full mt-1 inline-block bg-success text-success-foreground">
+                                  ✓ Verified
+                                </span>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button
+                                  size="lg"
+                                  className="bg-success text-success-foreground h-14 w-14"
+                                  disabled
+                                >
+                                  <CheckCircle className="w-6 h-6" />
+                                </Button>
+                                <Button
+                                  size="lg"
+                                  variant="outline"
+                                  className="h-14 w-14 border-amber-400 text-amber-600 hover:bg-amber-50"
+                                  onClick={() => openEditDialog(student.id, student.name, student.status)}
+                                  title="Change to Absent"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-14 w-10 text-destructive hover:text-destructive"
+                                      title="Remove Student"
+                                    >
+                                      <Trash2 className="w-5 h-5" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Remove Student?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will remove {student.name} from your class list. 
+                                        The student account will remain active.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction 
+                                        onClick={() => removeStudent(student.id)}
+                                        className="bg-destructive text-destructive-foreground"
+                                      >
+                                        Remove
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </TabsContent>
             </Tabs>
