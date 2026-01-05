@@ -14,10 +14,24 @@ interface AttendanceData {
 
 export const fetchAttendanceData = async (
   startDate: string,
-  endDate: string,
-  teacherClass?: string
+  endDate: string
 ): Promise<AttendanceData[]> => {
-  // Build query to get attendance with student info
+  const teacherId = localStorage.getItem("teacherId");
+  if (!teacherId) return [];
+
+  // First get students added by this teacher only
+  const { data: students, error: studentsError } = await supabase
+    .from("students")
+    .select("id, name, roll_number, class, section")
+    .eq("teacher_id", teacherId);
+
+  if (studentsError) throw studentsError;
+  if (!students || students.length === 0) return [];
+
+  const studentIds = students.map(s => s.id);
+  const studentMap = new Map(students.map(s => [s.id, s]));
+
+  // Get attendance for these students only
   const { data: attendance, error } = await supabase
     .from("student_attendance")
     .select(`
@@ -27,49 +41,26 @@ export const fetchAttendanceData = async (
       status,
       student_id
     `)
+    .in("student_id", studentIds)
     .gte("attendance_date", startDate)
     .lte("attendance_date", endDate)
     .order("attendance_date", { ascending: true });
 
   if (error) throw error;
 
-  // Get student details
-  const studentIds = [...new Set(attendance?.map(a => a.student_id) || [])];
-  
-  if (studentIds.length === 0) return [];
-
-  let studentQuery = supabase
-    .from("students")
-    .select("id, name, roll_number, class, section")
-    .in("id", studentIds);
-
-  if (teacherClass) {
-    const [cls, section] = teacherClass.split("-");
-    if (cls) studentQuery = studentQuery.eq("class", cls);
-    if (section) studentQuery = studentQuery.eq("section", section);
-  }
-
-  const { data: students, error: studentsError } = await studentQuery;
-  
-  if (studentsError) throw studentsError;
-
-  const studentMap = new Map(students?.map(s => [s.id, s]) || []);
-
-  return (attendance || [])
-    .filter(a => studentMap.has(a.student_id))
-    .map(a => {
-      const student = studentMap.get(a.student_id)!;
-      return {
-        student_name: student.name,
-        roll_number: student.roll_number,
-        class: student.class,
-        section: student.section,
-        date: a.attendance_date,
-        entry_time: a.entry_time,
-        exit_time: a.exit_time,
-        status: a.status
-      };
-    });
+  return (attendance || []).map(a => {
+    const student = studentMap.get(a.student_id)!;
+    return {
+      student_name: student.name,
+      roll_number: student.roll_number,
+      class: student.class,
+      section: student.section,
+      date: a.attendance_date,
+      entry_time: a.entry_time,
+      exit_time: a.exit_time,
+      status: a.status
+    };
+  });
 };
 
 export const generateCSV = (data: AttendanceData[], title: string): string => {
@@ -110,40 +101,40 @@ export const downloadCSV = (content: string, filename: string) => {
   URL.revokeObjectURL(link.href);
 };
 
-export const downloadDailyReport = async (teacherClass?: string) => {
+export const downloadDailyReport = async () => {
   const today = format(new Date(), "yyyy-MM-dd");
-  const data = await fetchAttendanceData(today, today, teacherClass);
+  const data = await fetchAttendanceData(today, today);
   const csv = generateCSV(data, `Daily Attendance Report - ${format(new Date(), "PPP")}`);
   downloadCSV(csv, `daily-attendance-${today}.csv`);
   return data.length;
 };
 
-export const downloadWeeklyReport = async (teacherClass?: string) => {
+export const downloadWeeklyReport = async () => {
   const today = new Date();
   const start = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
   const end = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
-  const data = await fetchAttendanceData(start, end, teacherClass);
+  const data = await fetchAttendanceData(start, end);
   const csv = generateCSV(data, `Weekly Attendance Report - Week of ${format(new Date(start), "PPP")}`);
   downloadCSV(csv, `weekly-attendance-${start}-to-${end}.csv`);
   return data.length;
 };
 
-export const downloadMonthlyReport = async (teacherClass?: string) => {
+export const downloadMonthlyReport = async () => {
   const today = new Date();
   const start = format(startOfMonth(today), "yyyy-MM-dd");
   const end = format(endOfMonth(today), "yyyy-MM-dd");
-  const data = await fetchAttendanceData(start, end, teacherClass);
+  const data = await fetchAttendanceData(start, end);
   const csv = generateCSV(data, `Monthly Attendance Report - ${format(today, "MMMM yyyy")}`);
   downloadCSV(csv, `monthly-attendance-${format(today, "yyyy-MM")}.csv`);
   return data.length;
 };
 
-export const downloadMidDayMealReport = async (teacherClass?: string) => {
+export const downloadMidDayMealReport = async () => {
   // Last 30 days for mid-day meal scheme
   const today = new Date();
   const start = format(subDays(today, 30), "yyyy-MM-dd");
   const end = format(today, "yyyy-MM-dd");
-  const data = await fetchAttendanceData(start, end, teacherClass);
+  const data = await fetchAttendanceData(start, end);
   
   // Filter only present students for mid-day meal
   const presentData = data.filter(d => d.status === "complete");
@@ -175,12 +166,12 @@ export const downloadMidDayMealReport = async (teacherClass?: string) => {
   return totalMeals;
 };
 
-export const getAttendanceStats = async (teacherClass?: string) => {
+export const getAttendanceStats = async () => {
   const today = new Date();
   const monthStart = format(startOfMonth(today), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(today), "yyyy-MM-dd");
   
-  const data = await fetchAttendanceData(monthStart, monthEnd, teacherClass);
+  const data = await fetchAttendanceData(monthStart, monthEnd);
   
   const uniqueDates = new Set(data.map(d => d.date));
   const workingDays = uniqueDates.size;

@@ -30,7 +30,7 @@ const Reports = () => {
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
-  const teacherClass = localStorage.getItem("teacherClass");
+  
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -53,7 +53,7 @@ const Reports = () => {
   const loadStats = async () => {
     try {
       setStatsLoading(true);
-      const data = await getAttendanceStats(teacherClass || undefined);
+      const data = await getAttendanceStats();
       setStats(data);
     } catch (error) {
       handleError(error, "Failed to load statistics");
@@ -68,16 +68,16 @@ const Reports = () => {
       let count = 0;
       switch (type) {
         case "daily":
-          count = await downloadDailyReport(teacherClass || undefined);
+          count = await downloadDailyReport();
           break;
         case "weekly":
-          count = await downloadWeeklyReport(teacherClass || undefined);
+          count = await downloadWeeklyReport();
           break;
         case "monthly":
-          count = await downloadMonthlyReport(teacherClass || undefined);
+          count = await downloadMonthlyReport();
           break;
         case "midday":
-          count = await downloadMidDayMealReport(teacherClass || undefined);
+          count = await downloadMidDayMealReport();
           break;
       }
       toast.success(`Report downloaded with ${count} records`);
