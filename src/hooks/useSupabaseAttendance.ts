@@ -39,31 +39,24 @@ export const useSupabaseAttendance = () => {
   const teacherId = localStorage.getItem("teacherId");
   const teacherClass = localStorage.getItem("teacherClass");
 
-  // Load students assigned to this teacher
+  // Load students assigned to this teacher only
   const loadStudents = useCallback(async () => {
     if (!teacherId) return;
 
     try {
-      let query = supabase
+      // Only show students manually added by this teacher
+      const { data, error } = await supabase
         .from("students")
-        .select("id, name, roll_number, class, section, school_name, teacher_id, present_days, absent_days, total_days");
-
-      // If teacher has a class assigned, filter by class OR teacher_id
-      if (teacherClass) {
-        const [cls, section] = teacherClass.split("-");
-        query = query.or(`teacher_id.eq.${teacherId},and(class.eq.${cls},section.eq.${section || "A"})`);
-      } else {
-        query = query.eq("teacher_id", teacherId);
-      }
-
-      const { data, error } = await query.order("roll_number");
+        .select("id, name, roll_number, class, section, school_name, teacher_id, present_days, absent_days, total_days")
+        .eq("teacher_id", teacherId)
+        .order("roll_number");
 
       if (error) throw error;
       setStudents(data || []);
     } catch (error) {
       handleError(error, "Failed to load students");
     }
-  }, [teacherId, teacherClass]);
+  }, [teacherId]);
 
   // Load today's attendance
   const loadTodayAttendance = useCallback(async () => {
