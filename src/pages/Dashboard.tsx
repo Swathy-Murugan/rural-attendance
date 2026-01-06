@@ -209,33 +209,6 @@ const Dashboard = () => {
           </div>
         </Card>
 
-        {/* Recent Activity */}
-        <Card className="p-6">
-          <h2 className="text-xl font-bold mb-4">Recent Activity</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-success" />
-                <span className="font-medium">Rahul Kumar - Class 5A</span>
-              </div>
-              <span className="text-sm text-muted-foreground">9:15 AM</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-success" />
-                <span className="font-medium">Priya Sharma - Class 5A</span>
-              </div>
-              <span className="text-sm text-muted-foreground">9:14 AM</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-success" />
-                <span className="font-medium">Amit Singh - Class 5A</span>
-              </div>
-              <span className="text-sm text-muted-foreground">9:12 AM</span>
-            </div>
-          </div>
-        </Card>
       </div>
     </div>
   );

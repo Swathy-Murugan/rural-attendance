@@ -270,7 +270,15 @@ Deno.serve(async (req) => {
         // Hash password
         const hashedPassword = await hashPassword(password);
         
-        // Insert student
+        // Find teacher with matching assigned_class (format: "class section", e.g., "6 B")
+        const studentClassSection = `${studentClass.trim()} ${section.trim().toUpperCase()}`;
+        const { data: matchingTeacher } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('assigned_class', studentClassSection)
+          .maybeSingle();
+        
+        // Insert student with teacher_id if matching teacher found
         const { data: newStudent, error } = await supabase
           .from('students')
           .insert({
@@ -283,7 +291,8 @@ Deno.serve(async (req) => {
             qr_code: qr_code || '',
             total_days: 0,
             present_days: 0,
-            absent_days: 0
+            absent_days: 0,
+            teacher_id: matchingTeacher?.id || null
           })
           .select('id, name, class, section, roll_number, school_name')
           .single();
