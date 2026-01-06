@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, WifiOff, CloudUpload, ArrowRightCircle } from "lucide-react";
 import { toast } from "sonner";
-import { useAttendance } from "@/hooks/useAttendance";
+import { useSupabaseAttendance } from "@/hooks/useSupabaseAttendance";
 import { useSync } from "@/hooks/useSync";
 import { clearSession, getSessionToken, verifySession } from "@/lib/auth";
+
 interface AttendanceStats {
   total: number;
   complete: number;
@@ -15,9 +16,14 @@ interface AttendanceStats {
   notMarked: number;
 }
 
+interface StudentInfo {
+  id: string;
+  name: string;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { getTodayStats, todayAttendance } = useAttendance();
+  const { students, getTodayStats, getStudentStatus, loading } = useSupabaseAttendance();
   const { isOnline, isSyncing, unsyncedCount } = useSync();
   const [stats, setStats] = useState<AttendanceStats>({
     total: 0,
@@ -26,6 +32,23 @@ const Dashboard = () => {
     absent: 0,
     notMarked: 0
   });
+
+  // Compute absent and not marked student names
+  const { absentStudents, notMarkedStudents } = useMemo(() => {
+    const absent: StudentInfo[] = [];
+    const notMarked: StudentInfo[] = [];
+    
+    for (const student of students) {
+      const status = getStudentStatus(student.id);
+      if (status === "absent") {
+        absent.push({ id: student.id, name: student.name });
+      } else if (status === "unmarked") {
+        notMarked.push({ id: student.id, name: student.name });
+      }
+    }
+    
+    return { absentStudents: absent, notMarkedStudents: notMarked };
+  }, [students, getStudentStatus]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -49,7 +72,7 @@ const Dashboard = () => {
       setStats(todayStats);
     };
     loadStats();
-  }, [getTodayStats, todayAttendance]);
+  }, [getTodayStats, students, getStudentStatus]);
 
   const teacherName = localStorage.getItem("teacherName") || "Teacher";
   const teacherClass = localStorage.getItem("teacherClass") || "";
@@ -165,19 +188,55 @@ const Dashboard = () => {
             value={stats.entryOnly} 
             color="bg-primary text-primary-foreground"
           />
-          <StatCard 
-            icon={XCircle} 
-            label="Absent Today" 
-            value={stats.absent} 
-            color="bg-destructive text-destructive-foreground"
-          />
-          <StatCard 
-            icon={Clock} 
-            label="Not Marked" 
-            value={stats.notMarked} 
-            color="bg-warning text-warning-foreground"
-          />
         </div>
+
+        {/* Absent Today Section */}
+        <Card className="p-6 bg-destructive/10 border-destructive/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-destructive rounded-lg">
+              <XCircle className="w-6 h-6 text-destructive-foreground" />
+            </div>
+            <div>
+              <h3 className="font-bold text-lg">Absent Today</h3>
+              <p className="text-sm text-muted-foreground">{stats.absent} student{stats.absent !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          {absentStudents.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {absentStudents.map(student => (
+                <span key={student.id} className="px-3 py-1 bg-destructive/20 text-destructive rounded-full text-sm font-medium">
+                  {student.name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No students marked absent today</p>
+          )}
+        </Card>
+
+        {/* Not Marked Section */}
+        <Card className="p-6 bg-warning/10 border-warning/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-warning rounded-lg">
+              <Clock className="w-6 h-6 text-warning-foreground" />
+            </div>
+            <div>
+              <h3 className="font-bold text-lg">Not Marked</h3>
+              <p className="text-sm text-muted-foreground">{stats.notMarked} student{stats.notMarked !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          {notMarkedStudents.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {notMarkedStudents.map(student => (
+                <span key={student.id} className="px-3 py-1 bg-warning/20 text-warning-foreground rounded-full text-sm font-medium">
+                  {student.name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">All students have been marked</p>
+          )}
+        </Card>
 
         {/* Quick Actions */}
         <Card className="p-6">
