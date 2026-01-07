@@ -2,11 +2,12 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, WifiOff, CloudUpload, ArrowRightCircle } from "lucide-react";
+import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, WifiOff, CloudUpload, ArrowRightCircle, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useSupabaseAttendance } from "@/hooks/useSupabaseAttendance";
 import { useSync } from "@/hooks/useSync";
 import { clearSession, getSessionToken, verifySession } from "@/lib/auth";
+import { AddStudentDialog } from "@/components/AddStudentDialog";
 
 interface AttendanceStats {
   total: number;
@@ -23,7 +24,9 @@ interface StudentInfo {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { students, getTodayStats, getStudentStatus, loading } = useSupabaseAttendance();
+  const { students, getTodayStats, getStudentStatus, loading, addStudent } = useSupabaseAttendance();
+  const teacherClass = localStorage.getItem("teacherClass") || "";
+  const [defaultClass, defaultSection] = teacherClass.split("-");
   const { isOnline, isSyncing, unsyncedCount } = useSync();
   const [stats, setStats] = useState<AttendanceStats>({
     total: 0,
@@ -75,7 +78,6 @@ const Dashboard = () => {
   }, [getTodayStats, students, getStudentStatus]);
 
   const teacherName = localStorage.getItem("teacherName") || "Teacher";
-  const teacherClass = localStorage.getItem("teacherClass") || "";
 
   const handleLogout = () => {
     clearSession();
@@ -257,6 +259,11 @@ const Dashboard = () => {
               <Users className="w-8 h-8" />
               Mark Manually
             </Button>
+            <AddStudentDialog 
+              onAddStudent={addStudent}
+              defaultClass={defaultClass}
+              defaultSection={defaultSection}
+            />
             <Button 
               variant="outline"
               className="h-20 flex flex-col gap-2 text-lg"
