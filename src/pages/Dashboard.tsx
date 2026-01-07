@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, WifiOff, CloudUpload, ArrowRightCircle } from "lucide-react";
+import { Users, CheckCircle, XCircle, Clock, QrCode, FileText, LogOut, Wifi, WifiOff, CloudUpload, ArrowRightCircle, UserPlus } from "lucide-react";
+import { AddStudentDialog } from "@/components/AddStudentDialog";
 import { toast } from "sonner";
 import { useSupabaseAttendance } from "@/hooks/useSupabaseAttendance";
 import { useSync } from "@/hooks/useSync";
@@ -23,7 +24,7 @@ interface StudentInfo {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { students, getTodayStats, getStudentStatus, loading } = useSupabaseAttendance();
+  const { students, getTodayStats, getStudentStatus, loading, addStudent } = useSupabaseAttendance();
   const { isOnline, isSyncing, unsyncedCount } = useSync();
   const [stats, setStats] = useState<AttendanceStats>({
     total: 0,
@@ -76,6 +77,7 @@ const Dashboard = () => {
 
   const teacherName = localStorage.getItem("teacherName") || "Teacher";
   const teacherClass = localStorage.getItem("teacherClass") || "";
+  const [defaultClass, defaultSection] = teacherClass.split("-");
 
   const handleLogout = () => {
     clearSession();
@@ -236,6 +238,16 @@ const Dashboard = () => {
           ) : (
             <p className="text-sm text-muted-foreground italic">All students have been marked</p>
           )}
+        </Card>
+
+        {/* Manage Students */}
+        <Card className="p-6">
+          <h2 className="text-xl font-bold mb-4">Manage Students</h2>
+          <AddStudentDialog 
+            onAddStudent={addStudent}
+            defaultClass={defaultClass}
+            defaultSection={defaultSection}
+          />
         </Card>
 
         {/* Quick Actions */}
