@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { handleError } from "@/lib/errorHandler";
-import * as api from "@/lib/api";
 
 export type AttendanceStatus = "unmarked" | "entry-only" | "exit-only" | "complete" | "absent";
 
@@ -36,28 +36,38 @@ export const useSupabaseAttendance = () => {
   const [updating, setUpdating] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
+  const teacherId = localStorage.getItem("teacherId");
+  const teacherClass = localStorage.getItem("teacherClass");
 
-  // Load students assigned to this teacher via secure API
+  // Load students assigned to this teacher only
   const loadStudents = useCallback(async () => {
+    if (!teacherId) return;
+
     try {
-      const result = await api.getStudents();
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      setStudents(result.data || []);
+      // Only show students manually added by this teacher
+      const { data, error } = await supabase
+        .from("students")
+        .select("id, name, roll_number, class, section, school_name, teacher_id, present_days, absent_days, total_days")
+        .eq("teacher_id", teacherId)
+        .order("roll_number");
+
+      if (error) throw error;
+      setStudents(data || []);
     } catch (error) {
       handleError(error, "Failed to load students");
     }
-  }, []);
+  }, [teacherId]);
 
-  // Load today's attendance via secure API
+  // Load today's attendance
   const loadTodayAttendance = useCallback(async () => {
     try {
-      const result = await api.getAttendance(today);
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      setTodayAttendance(result.data || []);
+      const { data, error } = await supabase
+        .from("student_attendance")
+        .select("*")
+        .eq("attendance_date", today);
+
+      if (error) throw error;
+      setTodayAttendance(data || []);
     } catch (error) {
       handleError(error, "Failed to load attendance");
     }
@@ -74,7 +84,7 @@ export const useSupabaseAttendance = () => {
     loadData();
   }, [loadData]);
 
-  // Mark attendance (entry or exit) via secure API
+  // Mark attendance (entry or exit)
   const markAttendance = useCallback(async (
     studentId: string,
     status: "present" | "absent",
@@ -88,8 +98,10 @@ export const useSupabaseAttendance = () => {
       }
 
       const existingRecord = todayAttendance.find(a => a.student_id === studentId);
+      const now = new Date().toISOString();
 
       if (existingRecord) {
+        // Update existing record
         if (type === "entry" && existingRecord.entry_time) {
           toast.info(`${student.name}'s entry already marked`);
           return;
@@ -98,24 +110,74 @@ export const useSupabaseAttendance = () => {
           toast.info(`${student.name}'s exit already marked`);
           return;
         }
-      }
 
-      const result = await api.markAttendance(studentId, status, type);
-      
-      if (result.error) {
-        toast.error(result.error);
-        return;
+        const updateData: Record<string, unknown> = {
+          marked_by: teacherId,
+          synced: true
+        };
+
+        if (type === "entry") {
+          updateData.entry_time = now;
+          updateData.status = status === "absent" ? "absent" : "entry-only";
+        } else {
+          updateData.exit_time = now;
+          updateData.status = existingRecord.entry_time ? "complete" : "exit-only";
+        }
+
+        const { error } = await supabase
+          .from("student_attendance")
+          .update(updateData)
+          .eq("id", existingRecord.id);
+
+        if (error) throw error;
+      } else {
+        // Create new record
+        const insertData = {
+          student_id: studentId,
+          attendance_date: today,
+          marked_by: teacherId,
+          synced: true,
+          status: status === "absent" ? "absent" : (type === "entry" ? "entry-only" : "exit-only"),
+          entry_time: type === "entry" && status === "present" ? now : null,
+          exit_time: type === "exit" ? now : null
+        };
+
+        const { error } = await supabase
+          .from("student_attendance")
+          .insert(insertData);
+
+        if (error) throw error;
+
+        // Update student counts for new records
+        if (status === "present") {
+          await supabase
+            .from("students")
+            .update({
+              present_days: (student.present_days || 0) + 1,
+              total_days: (student.total_days || 0) + 1
+            })
+            .eq("id", studentId);
+        } else {
+          await supabase
+            .from("students")
+            .update({
+              absent_days: (student.absent_days || 0) + 1,
+              total_days: (student.total_days || 0) + 1
+            })
+            .eq("id", studentId);
+        }
       }
 
       await loadTodayAttendance();
       await loadStudents();
-      toast.success(result.message || `${student.name} - ${type} marked as ${status}`);
+      const typeLabel = type === "entry" ? "Entry" : "Exit";
+      toast.success(`${student.name} - ${typeLabel} marked as ${status}`);
     } catch (error) {
       handleError(error, "Failed to mark attendance");
     }
-  }, [students, todayAttendance, loadTodayAttendance, loadStudents]);
+  }, [students, todayAttendance, today, teacherId, loadTodayAttendance, loadStudents]);
 
-  // Edit attendance for current day only via secure API
+  // Edit attendance for current day only - change absent to present or vice versa
   const editAttendance = useCallback(async (
     studentId: string,
     newStatus: "present" | "absent"
@@ -145,16 +207,60 @@ export const useSupabaseAttendance = () => {
         return false;
       }
 
-      const result = await api.editAttendance(studentId, newStatus);
-      
-      if (result.error) {
-        toast.error(result.error);
-        return false;
+      const now = new Date().toISOString();
+
+      // Update the attendance record
+      const updateData: Record<string, unknown> = {
+        marked_by: teacherId,
+        synced: true
+      };
+
+      if (newStatus === "present") {
+        // Changing from absent to present
+        updateData.status = "entry-only";
+        updateData.entry_time = now;
+        updateData.exit_time = null;
+      } else {
+        // Changing from present to absent
+        updateData.status = "absent";
+        updateData.entry_time = null;
+        updateData.exit_time = null;
       }
+
+      const { error: attendanceError } = await supabase
+        .from("student_attendance")
+        .update(updateData)
+        .eq("id", existingRecord.id);
+
+      if (attendanceError) throw attendanceError;
+
+      // Update student counts
+      let newPresentDays = student.present_days || 0;
+      let newAbsentDays = student.absent_days || 0;
+
+      if (isCurrentlyAbsent && newStatus === "present") {
+        // Changing from absent to present
+        newPresentDays = newPresentDays + 1;
+        newAbsentDays = Math.max(0, newAbsentDays - 1);
+      } else if (isCurrentlyPresent && newStatus === "absent") {
+        // Changing from present to absent
+        newPresentDays = Math.max(0, newPresentDays - 1);
+        newAbsentDays = newAbsentDays + 1;
+      }
+
+      const { error: studentError } = await supabase
+        .from("students")
+        .update({
+          present_days: newPresentDays,
+          absent_days: newAbsentDays
+        })
+        .eq("id", studentId);
+
+      if (studentError) throw studentError;
 
       await Promise.all([loadTodayAttendance(), loadStudents()]);
       
-      toast.success(result.message || `${student.name}'s attendance changed to ${newStatus}`);
+      toast.success(`${student.name}'s attendance changed to ${newStatus}`);
       return true;
     } catch (error) {
       handleError(error, "Failed to update attendance");
@@ -162,7 +268,7 @@ export const useSupabaseAttendance = () => {
     } finally {
       setUpdating(false);
     }
-  }, [students, todayAttendance, loadTodayAttendance, loadStudents]);
+  }, [students, todayAttendance, teacherId, loadTodayAttendance, loadStudents]);
 
   // Get student attendance status
   const getStudentStatus = useCallback((studentId: string): AttendanceStatus => {
@@ -202,7 +308,7 @@ export const useSupabaseAttendance = () => {
     return { total, complete, entryOnly, absent, notMarked };
   }, [students, getStudentStatus]);
 
-  // Add student to teacher's class via secure API
+  // Add student to teacher's class
   const addStudent = useCallback(async (studentData: {
     name: string;
     roll_number: string;
@@ -211,33 +317,35 @@ export const useSupabaseAttendance = () => {
     school_name: string;
   }): Promise<boolean> => {
     try {
-      const result = await api.addStudent(studentData);
-      
-      if (result.error) {
-        toast.error(result.error);
-        return false;
-      }
-      
-      toast.success(result.message || `${studentData.name} added successfully`);
+      const { error } = await supabase
+        .from("students")
+        .insert({
+          ...studentData,
+          teacher_id: teacherId,
+          password: "123456", // Default password
+          qr_code: "" // Will be generated when student logs in
+        });
+
+      if (error) throw error;
+      toast.success(`${studentData.name} added successfully`);
       await loadStudents();
       return true;
     } catch (error) {
       handleError(error, "Failed to add student");
       return false;
     }
-  }, [loadStudents]);
+  }, [teacherId, loadStudents]);
 
-  // Remove student from teacher's list via secure API
+  // Remove student from teacher's list
   const removeStudent = useCallback(async (studentId: string): Promise<boolean> => {
     try {
-      const result = await api.removeStudent(studentId);
-      
-      if (result.error) {
-        toast.error(result.error);
-        return false;
-      }
-      
-      toast.success(result.message || "Student removed from your list");
+      const { error } = await supabase
+        .from("students")
+        .update({ teacher_id: null })
+        .eq("id", studentId);
+
+      if (error) throw error;
+      toast.success("Student removed from your list");
       await loadStudents();
       return true;
     } catch (error) {

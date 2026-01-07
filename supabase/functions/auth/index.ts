@@ -1,31 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// CORS with allowed origins whitelist
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:8080',
-];
-
-// Check if origin matches Lovable preview pattern
-function isLovablePreview(origin: string): boolean {
-  return /^https:\/\/[a-z0-9-]+\.lovable\.app$/.test(origin) ||
-         /^https:\/\/[a-z0-9-]+\.lovableproject\.com$/.test(origin);
-}
-
-function getCorsHeaders(origin: string | null): Record<string, string> {
-  const isAllowed = origin && (
-    allowedOrigins.includes(origin) || 
-    isLovablePreview(origin)
-  );
-  
-  return {
-    'Access-Control-Allow-Origin': isAllowed && origin ? origin : allowedOrigins[0],
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Max-Age': '86400',
-  };
-}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 // Simple password hashing using Web Crypto API (compatible with Deno)
 async function hashPassword(password: string): Promise<string> {
@@ -124,9 +102,6 @@ async function verifySessionToken(token: string): Promise<{ valid: boolean; user
 }
 
 Deno.serve(async (req) => {
-  const origin = req.headers.get('origin');
-  const corsHeaders = getCorsHeaders(origin);
-
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -432,86 +407,6 @@ Deno.serve(async (req) => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
-      case 'change-password': {
-        const { current_password, new_password } = body;
-        const authHeader = req.headers.get('Authorization');
-        const sessionToken = authHeader?.replace('Bearer ', '');
-        
-        if (!sessionToken) {
-          return new Response(
-            JSON.stringify({ error: 'Unauthorized' }),
-            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        // Verify session token
-        const session = await verifySessionToken(sessionToken);
-        if (!session.valid || session.userType !== 'student') {
-          return new Response(
-            JSON.stringify({ error: 'Unauthorized' }),
-            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        if (!current_password || !new_password) {
-          return new Response(
-            JSON.stringify({ error: 'Missing required fields' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        if (new_password.length < 6) {
-          return new Response(
-            JSON.stringify({ error: 'New password must be at least 6 characters' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        // Get student record
-        const { data: student, error: fetchError } = await supabase
-          .from('students')
-          .select('password')
-          .eq('id', session.userId)
-          .single();
-        
-        if (fetchError || !student) {
-          return new Response(
-            JSON.stringify({ error: 'Student not found' }),
-            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        // Verify current password
-        const isValid = await verifyPassword(current_password, student.password);
-        if (!isValid) {
-          return new Response(
-            JSON.stringify({ error: 'Current password is incorrect' }),
-            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        // Hash new password
-        const hashedPassword = await hashPassword(new_password);
-        
-        // Update password
-        const { error: updateError } = await supabase
-          .from('students')
-          .update({ password: hashedPassword })
-          .eq('id', session.userId);
-        
-        if (updateError) {
-          return new Response(
-            JSON.stringify({ error: 'Failed to update password' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        return new Response(
-          JSON.stringify({ success: true, message: 'Password changed successfully' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
       
       case 'request-password-reset': {
         const { user_type, identifier } = body;
@@ -655,7 +550,6 @@ Deno.serve(async (req) => {
     }
   } catch (error) {
     console.error('Auth function error:', error);
-    const corsHeaders = getCorsHeaders(req.headers.get('origin'));
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

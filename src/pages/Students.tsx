@@ -6,7 +6,7 @@ import { ArrowLeft, LogIn, LogOut as LogOutIcon, XCircle, User, Wifi, WifiOff, C
 import { useSupabaseAttendance, AttendanceStatus } from "@/hooks/useSupabaseAttendance";
 import { useSync } from "@/hooks/useSync";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
+import { AddStudentDialog } from "@/components/AddStudentDialog";
 import { EditAttendanceDialog } from "@/components/EditAttendanceDialog";
 import { getSessionToken, verifySession, clearSession } from "@/lib/auth";
 import {
@@ -30,8 +30,9 @@ const Students = () => {
     markAttendance, 
     editAttendance,
     getStudentStatus, 
-    hasMarkedType,
-    removeStudent
+    hasMarkedType, 
+    addStudent,
+    removeStudent 
   } = useSupabaseAttendance();
   const { isOnline, isSyncing, unsyncedCount } = useSync();
   const [activeTab, setActiveTab] = useState<"entry" | "exit">("entry");
@@ -46,6 +47,7 @@ const Students = () => {
   } | null>(null);
 
   const teacherClass = localStorage.getItem("teacherClass") || "";
+  const [defaultClass, defaultSection] = teacherClass.split("-");
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -153,6 +155,11 @@ const Students = () => {
               </p>
             </div>
           </div>
+          <AddStudentDialog 
+            onAddStudent={addStudent}
+            defaultClass={defaultClass}
+            defaultSection={defaultSection}
+          />
         </div>
       </div>
 
@@ -205,9 +212,14 @@ const Students = () => {
           <Card className="p-8 text-center">
             <User className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-bold mb-2">No Students Added</h3>
-            <p className="text-muted-foreground">
-              Add students from the Dashboard to start taking attendance.
+            <p className="text-muted-foreground mb-4">
+              Add students to your class to start taking attendance.
             </p>
+            <AddStudentDialog 
+              onAddStudent={addStudent}
+              defaultClass={defaultClass}
+              defaultSection={defaultSection}
+            />
           </Card>
         )}
 

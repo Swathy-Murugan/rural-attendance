@@ -11,14 +11,14 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Key, Loader2 } from "lucide-react";
-import { changePassword } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ChangePasswordDialogProps {
   studentId: string;
   studentName: string;
 }
 
-export const ChangePasswordDialog = ({ studentName }: ChangePasswordDialogProps) => {
+export const ChangePasswordDialog = ({ studentId, studentName }: ChangePasswordDialogProps) => {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -35,8 +35,8 @@ export const ChangePasswordDialog = ({ studentName }: ChangePasswordDialogProps)
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters");
+    if (formData.newPassword.length < 4) {
+      toast.error("New password must be at least 4 characters");
       return;
     }
 
@@ -48,12 +48,28 @@ export const ChangePasswordDialog = ({ studentName }: ChangePasswordDialogProps)
     setIsLoading(true);
     
     try {
-      const result = await changePassword(formData.currentPassword, formData.newPassword);
-      
-      if (result.error) {
-        toast.error(result.error);
+      // Verify current password first
+      const { data: student, error: verifyError } = await supabase
+        .from("students")
+        .select("password")
+        .eq("id", studentId)
+        .single();
+
+      if (verifyError) throw verifyError;
+
+      if (student.password !== formData.currentPassword) {
+        toast.error("Current password is incorrect");
+        setIsLoading(false);
         return;
       }
+
+      // Update password
+      const { error: updateError } = await supabase
+        .from("students")
+        .update({ password: formData.newPassword })
+        .eq("id", studentId);
+
+      if (updateError) throw updateError;
 
       toast.success("Password changed successfully!");
       setOpen(false);
@@ -102,11 +118,11 @@ export const ChangePasswordDialog = ({ studentName }: ChangePasswordDialogProps)
             <label className="text-sm font-medium">New Password *</label>
             <Input
               type="password"
-              placeholder="Enter new password (min 6 characters)"
+              placeholder="Enter new password (min 4 characters)"
               value={formData.newPassword}
               onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
               className="h-11"
-              minLength={6}
+              minLength={4}
               required
             />
           </div>
@@ -119,13 +135,13 @@ export const ChangePasswordDialog = ({ studentName }: ChangePasswordDialogProps)
               value={formData.confirmPassword}
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
               className="h-11"
-              minLength={6}
+              minLength={4}
               required
             />
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Your password should be at least 6 characters long.
+            Your password should be at least 4 characters long.
           </p>
 
           <Button type="submit" className="w-full" disabled={isLoading}>
