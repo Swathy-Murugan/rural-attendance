@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { handleError } from "@/lib/errorHandler";
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
 export type AttendanceStatus = "unmarked" | "entry-only" | "exit-only" | "complete" | "absent";
 
 export interface Student {
@@ -39,20 +41,23 @@ export const useSupabaseAttendance = () => {
   const teacherId = localStorage.getItem("teacherId");
   const teacherClass = localStorage.getItem("teacherClass");
 
-  // Load students assigned to this teacher only
+  // Load students assigned to this teacher using edge function
   const loadStudents = useCallback(async () => {
     if (!teacherId) return;
 
     try {
-      // Only show students manually added by this teacher
-      const { data, error } = await supabase
-        .from("students")
-        .select("id, name, roll_number, class, section, school_name, teacher_id, present_days, absent_days, total_days")
-        .eq("teacher_id", teacherId)
-        .order("roll_number");
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "get-students",
+          teacher_id: teacherId
+        })
+      });
 
-      if (error) throw error;
-      setStudents(data || []);
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      setStudents(result.students || []);
     } catch (error) {
       handleError(error, "Failed to load students");
     }
@@ -308,7 +313,7 @@ export const useSupabaseAttendance = () => {
     return { total, complete, entryOnly, absent, notMarked };
   }, [students, getStudentStatus]);
 
-  // Add student to teacher's class
+  // Add student to teacher's class using edge function
   const addStudent = useCallback(async (studentData: {
     name: string;
     roll_number: string;
@@ -317,16 +322,19 @@ export const useSupabaseAttendance = () => {
     school_name: string;
   }): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from("students")
-        .insert({
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add-student",
           ...studentData,
-          teacher_id: teacherId,
-          password: "123456", // Default password
-          qr_code: "" // Will be generated when student logs in
-        });
+          teacher_id: teacherId
+        })
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      
       toast.success(`${studentData.name} added successfully`);
       await loadStudents();
       return true;
@@ -336,15 +344,22 @@ export const useSupabaseAttendance = () => {
     }
   }, [teacherId, loadStudents]);
 
-  // Remove student from teacher's list
+  // Remove student from teacher's list using edge function
   const removeStudent = useCallback(async (studentId: string): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from("students")
-        .update({ teacher_id: null })
-        .eq("id", studentId);
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "remove-student",
+          student_id: studentId,
+          teacher_id: teacherId
+        })
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      
       toast.success("Student removed from your list");
       await loadStudents();
       return true;
@@ -352,7 +367,7 @@ export const useSupabaseAttendance = () => {
       handleError(error, "Failed to remove student");
       return false;
     }
-  }, [loadStudents]);
+  }, [teacherId, loadStudents]);
 
   return {
     students,
