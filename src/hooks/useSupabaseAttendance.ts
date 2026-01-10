@@ -63,20 +63,28 @@ export const useSupabaseAttendance = () => {
     }
   }, [teacherId]);
 
-  // Load today's attendance
+  // Load today's attendance using edge function
   const loadTodayAttendance = useCallback(async () => {
+    if (!teacherId) return;
+    
     try {
-      const { data, error } = await supabase
-        .from("student_attendance")
-        .select("*")
-        .eq("attendance_date", today);
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "get-attendance",
+          teacher_id: teacherId,
+          date: today
+        })
+      });
 
-      if (error) throw error;
-      setTodayAttendance(data || []);
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      setTodayAttendance(result.attendance || []);
     } catch (error) {
       handleError(error, "Failed to load attendance");
     }
-  }, [today]);
+  }, [today, teacherId]);
 
   // Load all data
   const loadData = useCallback(async () => {
@@ -89,7 +97,7 @@ export const useSupabaseAttendance = () => {
     loadData();
   }, [loadData]);
 
-  // Mark attendance (entry or exit)
+  // Mark attendance (entry or exit) using edge function
   const markAttendance = useCallback(async (
     studentId: string,
     status: "present" | "absent",
@@ -106,7 +114,7 @@ export const useSupabaseAttendance = () => {
       const now = new Date().toISOString();
 
       if (existingRecord) {
-        // Update existing record
+        // Check if already marked
         if (type === "entry" && existingRecord.entry_time) {
           toast.info(`${student.name}'s entry already marked`);
           return;
@@ -116,61 +124,75 @@ export const useSupabaseAttendance = () => {
           return;
         }
 
-        const updateData: Record<string, unknown> = {
-          marked_by: teacherId,
-          synced: true
-        };
+        // Prepare update data
+        let newStatus = existingRecord.status;
+        let entryTime = existingRecord.entry_time;
+        let exitTime = existingRecord.exit_time;
 
         if (type === "entry") {
-          updateData.entry_time = now;
-          updateData.status = status === "absent" ? "absent" : "entry-only";
+          entryTime = now;
+          newStatus = status === "absent" ? "absent" : "entry-only";
         } else {
-          updateData.exit_time = now;
-          updateData.status = existingRecord.entry_time ? "complete" : "exit-only";
+          exitTime = now;
+          newStatus = existingRecord.entry_time ? "complete" : "exit-only";
         }
 
-        const { error } = await supabase
-          .from("student_attendance")
-          .update(updateData)
-          .eq("id", existingRecord.id);
+        // Update via edge function
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "mark-attendance",
+            student_id: studentId,
+            attendance_date: today,
+            status: newStatus,
+            entry_time: entryTime,
+            exit_time: exitTime,
+            marked_by: teacherId
+          })
+        });
 
-        if (error) throw error;
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
       } else {
         // Create new record
-        const insertData = {
-          student_id: studentId,
-          attendance_date: today,
-          marked_by: teacherId,
-          synced: true,
-          status: status === "absent" ? "absent" : (type === "entry" ? "entry-only" : "exit-only"),
-          entry_time: type === "entry" && status === "present" ? now : null,
-          exit_time: type === "exit" ? now : null
-        };
+        const newStatus = status === "absent" ? "absent" : (type === "entry" ? "entry-only" : "exit-only");
+        const entryTime = type === "entry" && status === "present" ? now : null;
+        const exitTime = type === "exit" ? now : null;
 
-        const { error } = await supabase
-          .from("student_attendance")
-          .insert(insertData);
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "mark-attendance",
+            student_id: studentId,
+            attendance_date: today,
+            status: newStatus,
+            entry_time: entryTime,
+            exit_time: exitTime,
+            marked_by: teacherId
+          })
+        });
 
-        if (error) throw error;
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
 
         // Update student counts for new records
-        if (status === "present") {
-          await supabase
-            .from("students")
-            .update({
-              present_days: (student.present_days || 0) + 1,
-              total_days: (student.total_days || 0) + 1
-            })
-            .eq("id", studentId);
-        } else {
-          await supabase
-            .from("students")
-            .update({
-              absent_days: (student.absent_days || 0) + 1,
-              total_days: (student.total_days || 0) + 1
-            })
-            .eq("id", studentId);
-        }
+        const newPresentDays = status === "present" ? (student.present_days || 0) + 1 : (student.present_days || 0);
+        const newAbsentDays = status === "absent" ? (student.absent_days || 0) + 1 : (student.absent_days || 0);
+        const newTotalDays = (student.total_days || 0) + 1;
+
+        await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "update-student-stats",
+            student_id: studentId,
+            present_days: newPresentDays,
+            absent_days: newAbsentDays,
+            total_days: newTotalDays
+          })
+        });
       }
 
       await loadTodayAttendance();
@@ -214,54 +236,61 @@ export const useSupabaseAttendance = () => {
 
       const now = new Date().toISOString();
 
-      // Update the attendance record
-      const updateData: Record<string, unknown> = {
-        marked_by: teacherId,
-        synced: true
-      };
+      // Prepare attendance update
+      let updatedStatus = "";
+      let entryTime: string | null = null;
+      let exitTime: string | null = null;
 
       if (newStatus === "present") {
-        // Changing from absent to present
-        updateData.status = "entry-only";
-        updateData.entry_time = now;
-        updateData.exit_time = null;
+        updatedStatus = "entry-only";
+        entryTime = now;
+        exitTime = null;
       } else {
-        // Changing from present to absent
-        updateData.status = "absent";
-        updateData.entry_time = null;
-        updateData.exit_time = null;
+        updatedStatus = "absent";
+        entryTime = null;
+        exitTime = null;
       }
 
-      const { error: attendanceError } = await supabase
-        .from("student_attendance")
-        .update(updateData)
-        .eq("id", existingRecord.id);
+      // Update via edge function
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "mark-attendance",
+          student_id: studentId,
+          attendance_date: today,
+          status: updatedStatus,
+          entry_time: entryTime,
+          exit_time: exitTime,
+          marked_by: teacherId
+        })
+      });
 
-      if (attendanceError) throw attendanceError;
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
 
       // Update student counts
       let newPresentDays = student.present_days || 0;
       let newAbsentDays = student.absent_days || 0;
 
       if (isCurrentlyAbsent && newStatus === "present") {
-        // Changing from absent to present
         newPresentDays = newPresentDays + 1;
         newAbsentDays = Math.max(0, newAbsentDays - 1);
       } else if (isCurrentlyPresent && newStatus === "absent") {
-        // Changing from present to absent
         newPresentDays = Math.max(0, newPresentDays - 1);
         newAbsentDays = newAbsentDays + 1;
       }
 
-      const { error: studentError } = await supabase
-        .from("students")
-        .update({
+      await fetch(`${SUPABASE_URL}/functions/v1/manage-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update-student-stats",
+          student_id: studentId,
           present_days: newPresentDays,
           absent_days: newAbsentDays
         })
-        .eq("id", studentId);
-
-      if (studentError) throw studentError;
+      });
 
       await Promise.all([loadTodayAttendance(), loadStudents()]);
       
@@ -273,7 +302,9 @@ export const useSupabaseAttendance = () => {
     } finally {
       setUpdating(false);
     }
-  }, [students, todayAttendance, teacherId, loadTodayAttendance, loadStudents]);
+  }, [students, todayAttendance, today, teacherId, loadTodayAttendance, loadStudents]);
+
+
 
   // Get student attendance status
   const getStudentStatus = useCallback((studentId: string): AttendanceStatus => {

@@ -142,6 +142,157 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Get today's attendance for a teacher's students
+    if (action === "get-attendance") {
+      const { teacher_id, date } = data;
+
+      if (!teacher_id || !date) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Missing teacher_id or date" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Get students for this teacher
+      const { data: students, error: studentsError } = await supabase
+        .from("students")
+        .select("id")
+        .eq("teacher_id", teacher_id);
+
+      if (studentsError) {
+        return new Response(
+          JSON.stringify({ success: false, error: studentsError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const studentIds = (students || []).map(s => s.id);
+
+      if (studentIds.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, attendance: [] }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Get attendance for these students on the date
+      const { data: attendance, error: attendanceError } = await supabase
+        .from("student_attendance")
+        .select("*")
+        .eq("attendance_date", date)
+        .in("student_id", studentIds);
+
+      if (attendanceError) {
+        return new Response(
+          JSON.stringify({ success: false, error: attendanceError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, attendance: attendance || [] }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Mark attendance (create or update)
+    if (action === "mark-attendance") {
+      const { student_id, attendance_date, status, entry_time, exit_time, marked_by } = data;
+
+      if (!student_id || !attendance_date || !status) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Missing required fields" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check if record exists
+      const { data: existing } = await supabase
+        .from("student_attendance")
+        .select("id")
+        .eq("student_id", student_id)
+        .eq("attendance_date", attendance_date)
+        .maybeSingle();
+
+      if (existing) {
+        // Update existing record
+        const updateData: Record<string, unknown> = { status, marked_by, synced: true };
+        if (entry_time !== undefined) updateData.entry_time = entry_time;
+        if (exit_time !== undefined) updateData.exit_time = exit_time;
+
+        const { error: updateError } = await supabase
+          .from("student_attendance")
+          .update(updateData)
+          .eq("id", existing.id);
+
+        if (updateError) {
+          return new Response(
+            JSON.stringify({ success: false, error: updateError.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from("student_attendance")
+          .insert({
+            student_id,
+            attendance_date,
+            status,
+            entry_time: entry_time || null,
+            exit_time: exit_time || null,
+            marked_by,
+            synced: true
+          });
+
+        if (insertError) {
+          return new Response(
+            JSON.stringify({ success: false, error: insertError.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Update student stats (present_days, absent_days, etc.)
+    if (action === "update-student-stats") {
+      const { student_id, present_days, absent_days, total_days } = data;
+
+      if (!student_id) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Missing student_id" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const updateData: Record<string, number> = {};
+      if (present_days !== undefined) updateData.present_days = present_days;
+      if (absent_days !== undefined) updateData.absent_days = absent_days;
+      if (total_days !== undefined) updateData.total_days = total_days;
+
+      const { error: updateError } = await supabase
+        .from("students")
+        .update(updateData)
+        .eq("id", student_id);
+
+      if (updateError) {
+        return new Response(
+          JSON.stringify({ success: false, error: updateError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: "Invalid action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
